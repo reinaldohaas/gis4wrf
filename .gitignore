@@ -109,7 +109,6 @@ namelist.input
 # Auto-generated
 gis4wrf/plugin/resources/resources.py
 gis4wrf/core/readers/nml_schemas/*.json
-*.zip
 
 # mypy linter cache
 .mypy_cache/
