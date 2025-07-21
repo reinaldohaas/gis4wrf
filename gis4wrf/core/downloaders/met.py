@@ -12,10 +12,13 @@ import glob
 import os
 import shutil
 from datetime import datetime
+from rda_apps_clients import rdams_client as rc
+from urllib.request import build_opener
 
 from .util import download_file_with_progress, requests_retry_session
 from gis4wrf.core.util import export, remove_dir
 from gis4wrf.core.errors import UserError
+from gis4wrf.plugin.options import get_options
 
 DATE_FORMAT = '%Y%m%d%H%M'
 COMPLETED_STATUS = 'Completed'
@@ -195,3 +198,78 @@ def rda_purge_request(request_id: str, auth: tuple) -> None:
     with requests_retry_session() as session:
         response = session.delete(f'{API_BASE_URL}/request/{request_id}', auth=auth)
         response.raise_for_status()
+
+def download_met_data(start_date, end_date, nlat, slat, wlon, elon):
+    """
+    Baixa dados MET usando API RDA com autenticação via token.
+    As datas devem estar no formato 'YYYYMMDDHHMM'.
+    """
+    options = get_options()
+    rda_token = options.rda_token
+    rda_client = rc.get_authentication(rda_token)
+
+    # Monta o controle da requisição
+    control = {
+        'dataset': 'ds083.3',
+        'date': f'{start_date}/to/{end_date}',
+        'param': 'TMP/DPT/SPF H/R H/WEASD/V GRD/U GRD/PRES/PRMSL/HGT/ICEC/LAND/TSOIL/SOILW',
+        'nlat': nlat,
+        'slat': slat,
+        'wlon': wlon,
+        'elon': elon,
+        'product': 'Analysis'
+    }
+
+    # Submete a requisição
+    response = rc.submit_json(control)
+    assert response['http_response'] == 200, f"Falha ao submeter requisição: {response['http_response']}"
+    rqst_id = response['data']['request_id']
+
+    def check_ready(rqst_id, wait_interval=120):
+        for i in range(100):
+            res = rc.get_status(rqst_id)
+            request_status = res['data']['status']
+            if request_status == 'Completed':
+                return True
+            time.sleep(wait_interval)
+        return False
+
+    # Aguarda a requisição ficar pronta
+    if check_ready(rqst_id):
+        rc.download(rqst_id)
+    else:
+        print("Requisição não está pronta para download.")
+        return
+
+    # Obtém a lista de arquivos (exemplo: pode ser obtida da resposta ou montada conforme datas)
+    # Aqui, supondo que os arquivos seguem o padrão 'gdas1.fnl0p25.YYYYMMDDHH.f00.grib2'
+    # Você pode ajustar conforme necessário!
+    filelist = []
+    for dt in [start_date, end_date]:
+        hour = dt[-2:]
+        filelist.append(f'gdas1.fnl0p25.{dt}.f00.grib2')
+
+    # Faz download manual dos arquivos
+    dspath = f'https://request.rda.ucar.edu/dsrqst/{rqst_id}/'
+    opener = build_opener()
+    for file in filelist:
+        filename = dspath + file
+        ofile = os.path.basename(filename)
+        try:
+            with opener.open(filename) as infile, open(ofile, "wb") as outfile:
+                outfile.write(infile.read())
+            print(f"Baixado: {ofile}")
+        except Exception as e:
+            print(f"Falha ao baixar {ofile}: {e}")
+
+    # Cria diretório de destino conforme data de início
+    date_folder = start_date[:8]  # YYYYMMDD
+    drive_path = f'/home/haas/gis4wrf/datasets/met/gdas/{date_folder}'
+    os.makedirs(drive_path, exist_ok=True)
+    for file in filelist:
+        if os.path.exists(file):
+            os.rename(file, os.path.join(drive_path, file))
+    print(f"Arquivos .grib2 copiados para {drive_path}")
+
+# Exemplo de uso:
+# download_met_data('2018071512', '2018071518', 59, 46, -2, 12)

@@ -264,3 +264,16 @@ def run_subprocess(args: List[str], log_path: str) -> Iterable[str]:
 
     if process.returncode != 0:
         raise subprocess.CalledProcessError(process.returncode, args)
+
+import subprocess
+import sys
+
+def ensure_rda_apps_clients():
+    try:
+        import rda_apps_clients
+    except ImportError:
+        print("Instalando rda_apps_clients...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "rda_apps_clients"])
+        print("rda_apps_clients instalado com sucesso.")
+
+ensure_rda_apps_clients()

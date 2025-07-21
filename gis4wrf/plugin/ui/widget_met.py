@@ -7,7 +7,7 @@ from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QVBoxLayout, QGridLayout, QGroupBox, QLabel, QHBoxLayout, 
     QComboBox, QRadioButton, QTreeWidget, QTreeWidgetItem, QDateTimeEdit, QTreeWidgetItemIterator,
-    QListWidget, QListWidgetItem, QProgressBar, QMessageBox
+    QListWidget, QListWidgetItem, QProgressBar, QMessageBox, QLineEdit
 )
 
 
@@ -119,6 +119,13 @@ class MetToolsDownloadManager(QWidget):
         self.progress_bar.setTextVisible(False)
         self.progress_bar.hide()
         vbox.addWidget(self.progress_bar)
+
+        # Substitua campos de usuário/senha por campo para token
+        self.rda_token_label = QLabel('Token da RDA:')
+        self.rda_token_input = QLineEdit()
+        self.rda_token_input.setText(options.rda_token or '')
+        vbox.addWidget(self.rda_token_label)
+        vbox.addWidget(self.rda_token_input)
 
     def on_dataset_changed(self, index: int):
         self.cbox_product.clear()
@@ -261,3 +268,8 @@ class MetToolsDownloadManager(QWidget):
         self.top.set_value(lat_north)
         self.left.set_value(lon_west)
         self.right.set_value(lon_east)
+
+    # Ao salvar opções:
+    def save_options(self):
+        options.rda_token = self.rda_token_input.text()
+        options.save()

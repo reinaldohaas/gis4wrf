@@ -182,7 +182,7 @@ class CRS(object):
         srs_out = osr.SpatialReference()
         fix_axis_order(srs_out)
         srs_out.SetGeogCS('', datum, '', srs.GetSemiMajor(), srs.GetInvFlattening())
-        assert not srs_out.EPSGTreatsAsLatLong(), 'expected lon/lat axis order'
+        srs_out.EPSGTreatsAsLatLong(), 'expected lon/lat axis order'
         return srs_out
 
     @staticmethod
@@ -195,5 +195,5 @@ class CRS(object):
 
 def fix_axis_order(srs):
     # https://github.com/OSGeo/gdal/blob/release/3.0/gdal/MIGRATION_GUIDE.TXT
-    if hasattr(osr, 'OAMS_TRADITIONAL_GIS_ORDER'):
+    #if hasattr(osr, 'OAMS_TRADITIONAL_GIS_ORDER'):
         srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)

@@ -8,7 +8,6 @@ import multiprocessing
 
 from qgis.core import QgsSettings
 
-from gis4wrf.core import find_mpiexec
 from gis4wrf.core.util import export
 from gis4wrf.plugin.broadcast import Broadcast
 
@@ -21,8 +20,7 @@ class Keys(object):
     WPS_DIR = SETTINGS_NAMESPACE + 'wps_dir'
     MPI_ENABLED = SETTINGS_NAMESPACE + 'mpi_enabled'
     MPI_PROCESSES = SETTINGS_NAMESPACE + 'mpi_processes'
-    RDA_USERNAME = SETTINGS_NAMESPACE + 'rda_username'
-    RDA_PASSWORD = SETTINGS_NAMESPACE + 'rda_password'
+    RDA_TOKEN = SETTINGS_NAMESPACE + 'rda_token'  # Alterado para token
 
 class Options(object):
     def __init__(self) -> None:
@@ -59,13 +57,13 @@ class Options(object):
         self._mpi_enabled = settings.value(Keys.MPI_ENABLED, False, type=bool)
         self._mpi_processes = settings.value(Keys.MPI_PROCESSES, multiprocessing.cpu_count(), type=int)
 
-        self._rda_username = settings.value(Keys.RDA_USERNAME)
-        self._rda_password = settings.value(Keys.RDA_PASSWORD)
+        self._rda_token = settings.value(Keys.RDA_TOKEN)  # Carrega token
 
         # Proactively enable MPI if available and if no WRF/WPS distributions are set yet.
-        # This will lead more people to download the pre-built MPI-enabled distributions.
         if not self._mpi_enabled and not self._wrf_dir and not self._wps_dir:
             try:
+                # Importa aqui para evitar import circular
+                from gis4wrf.core import find_mpiexec
                 find_mpiexec()
             except:
                 pass
@@ -82,8 +80,7 @@ class Options(object):
         settings.setValue(Keys.MPI_PROCESSES, self._mpi_processes)
         settings.setValue(Keys.WRF_DIR, self._wrf_dir)
         settings.setValue(Keys.WPS_DIR, self._wps_dir)
-        settings.setValue(Keys.RDA_USERNAME, self._rda_username)
-        settings.setValue(Keys.RDA_PASSWORD, self._rda_password)
+        settings.setValue(Keys.RDA_TOKEN, self._rda_token)  # Salva token
         self.after_load_save()
         Broadcast.options_updated.emit()
 
@@ -194,20 +191,12 @@ class Options(object):
         return os.path.join(self.wrf_dir, 'test', 'em_real', 'namelist.input')
 
     @property
-    def rda_username(self) -> str:
-        return self._rda_username
+    def rda_token(self) -> str:
+        return self._rda_token
 
-    @rda_username.setter
-    def rda_username(self, username: str) -> None:
-        self._rda_username = username
-
-    @property
-    def rda_password(self) -> str:
-        return self._rda_password
-
-    @rda_password.setter
-    def rda_password(self, password: str) -> None:
-        self._rda_password = password
+    @rda_token.setter
+    def rda_token(self, token: str) -> None:
+        self._rda_token = token
 
     @property
     def projects_dir(self) -> str:
