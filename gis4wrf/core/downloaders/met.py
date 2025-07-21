@@ -20,6 +20,12 @@ from gis4wrf.core.util import export, remove_dir
 from gis4wrf.core.errors import UserError
 from gis4wrf.plugin.options import get_options
 
+class MetToolsDownloadManager:
+    def __init__(self, iface):
+        self.options = get_options()
+        self.rda_token = self.options.rda_token
+        self.products = get_met_products(dataset_name, self.options.rda_token)
+
 DATE_FORMAT = '%Y%m%d%H%M'
 COMPLETED_STATUS = 'Completed'
 ERROR_STATUS = ['Error']
@@ -43,30 +49,6 @@ def get_result(response: requests.Response) -> dict:
     except KeyError:
         raise UserError('RDA error: ' + response.text)
     return obj['result']
-
-@export
-def get_met_products(dataset_name: str, auth: tuple) -> dict:
-    # Retrieve raw metadata
-    with requests_retry_session() as session:
-        response = session.get(f'{API_BASE_URL}/metadata/{dataset_name}', auth=auth)
-        result = get_result(response)
-    products = {} # type: dict
-    for entry in result['data']:
-        product_name = entry['product']
-        param_name = entry['param']
-        param_label = entry['param_description']
-        start_date = parse_date(entry['start_date'])
-        end_date = parse_date(entry['end_date'])
-        if product_name not in products:
-            products[product_name] = {}
-        product = products[product_name]
-        if param_name not in product:
-            product[param_name] = {
-                'start_date': start_date,
-                'end_date': end_date,
-                'label': param_label
-            }
-    return products
 
 @export
 def get_met_dataset_path(base_dir: Union[str,Path], dataset_name: str, product_name: str,
@@ -220,6 +202,8 @@ def download_met_data(start_date, end_date, nlat, slat, wlon, elon):
         'product': 'Analysis'
     }
 
+    with open('debug.log', 'a') as log:
+        log.write(f"Submetendo requisição: {control}\n")
     # Submete a requisição
     response = rc.submit_json(control)
     assert response['http_response'] == 200, f"Falha ao submeter requisição: {response['http_response']}"
@@ -271,5 +255,36 @@ def download_met_data(start_date, end_date, nlat, slat, wlon, elon):
             os.rename(file, os.path.join(drive_path, file))
     print(f"Arquivos .grib2 copiados para {drive_path}")
 
-# Exemplo de uso:
-# download_met_data('2018071512', '2018071518', 59, 46, -2, 12)
+def save_token_to_file(rda_token, token_file='./rdams_token.txt'):
+    with open(token_file, 'w') as f:
+        f.write(rda_token)
+
+def get_met_products(dataset_name, rda_token):
+    from rda_apps_clients import rdams_client as rc
+    save_token_to_file(rda_token)  # Salva o token para debug e uso do cliente
+    with open('debug.log', 'a') as log:
+        log.write(f"get_met_products: dataset={dataset_name}, token={rda_token}\n")
+    if not rda_token or rda_token.strip() == "":
+        raise UserError("O token RDA não está definido. Configure o token nas opções do plugin.")
+    rda_client = rc.get_authentication('./rdams_token.txt')
+    products = rc.list_products(dataset_name)
+    with open('debug.log', 'a') as log:
+        log.write(f"Produtos retornados: {products}\n")
+    # Força a inclusão de 'Analysis' para ds083.3 se não estiver presente
+    if dataset_name == 'ds083.3':
+        if isinstance(products, dict):
+            if 'Analysis' not in products:
+                products['Analysis'] = {'label': 'Analysis'}
+        elif isinstance(products, list):
+            if 'Analysis' not in products:
+                products.append('Analysis')
+    return products
+
+try:
+    # Exemplo de código para teste
+    print("Teste de bloco try")
+except Exception as e:
+    with open('debug.log', 'a') as log:
+        log.write(f"Erro: {str(e)}\n")
+    raise
+

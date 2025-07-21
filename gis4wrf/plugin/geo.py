@@ -215,16 +215,17 @@ def load_wps_binary_layer(folder: str) -> None:
     dispose_after_delete(layer, dispose)
 
 def add_default_basemap() -> None:
-    url = 'type=xyz&zmin=0&zmax=20&url=http://a.tile.stamen.com/terrain-background/{z}/{x}/{y}.png'
+
+    url = 'type=xyz&url=https://mt1.google.com/vt/lyrs%3Dp%26x%3D%7Bx%7D%26y%3D%7By%7D%26z%3D%7Bz%7D'
     attribution = 'Map tiles by Stamen Design, under CC BY 3.0. Data by OpenStreetMap, under ODbL'
-    attribution_url = 'http://maps.stamen.com'
+    attribution_url = 'https://mt1.google.com/vt/lyrs=p'
     registry = QgsProject.instance() # type: QgsProject
     root = registry.layerTreeRoot() # type: QgsLayerTree
 
     tree_layers = filter(QgsLayerTree.isLayer, root.children())
     if any(tree_layer.layer().source() == url for tree_layer in tree_layers):
         return
-    layer = QgsRasterLayer(url, 'Stamen Terrain Background', 'wms')
+    layer = QgsRasterLayer(url, 'Google Terrain Hybrid', 'wms')
     layer.setAttribution(attribution)
     layer.setAttributionUrl(attribution_url)
     registry.addMapLayer(layer, False)

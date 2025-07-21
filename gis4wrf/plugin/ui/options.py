@@ -53,7 +53,7 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
             self.create_distribution_box()
         self.vbox.addWidget(gbox)
 
-        self.rda_username, self.rda_password, gbox = self.create_rda_auth_input()
+        self.rda_token_input, gbox = self.create_rda_auth_input()
         self.vbox.addWidget(gbox)
 
         self.vbox.addStretch()
@@ -65,8 +65,7 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
         self.options.mpi_processes = self.mpi_processes.value()
         self.options.wrf_dir = self.wrf_dir.text()
         self.options.wps_dir = self.wps_dir.text()
-        self.options.rda_username = self.rda_username.text()
-        self.options.rda_password = self.rda_password.text()
+        self.options.rda_token = self.rda_token_input.text()
         self.options.save()
 
     def create_distribution_box(self) -> Tuple[QCheckBox, QSpinBox, QLineEdit, QLineEdit, QGroupBox]:
@@ -121,16 +120,12 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
 
         return mpi_enabled, mpi_processes, wps_dir, wrf_dir, gbox
 
-    def create_rda_auth_input(self) -> Tuple[QLineEdit, QLineEdit, QGroupBox]:
-        username = QLineEdit(self.options.rda_username)
-        password = QLineEdit(self.options.rda_password)
-        password.setEchoMode(QLineEdit.Password)
+    def create_rda_auth_input(self) -> Tuple[QLineEdit, QGroupBox]:
+        rda_token_input = QLineEdit(self.options.rda_token)
 
         hbox = QHBoxLayout()
-        hbox.addWidget(QLabel('Username: '))
-        hbox.addWidget(username)
-        hbox.addWidget(QLabel('Password: '))
-        hbox.addWidget(password)
+        hbox.addWidget(QLabel("RDA Token:"))
+        hbox.addWidget(rda_token_input)
 
         gbox = QGroupBox("NCAR's Research Data Archive (RDA)")
         text = """<html>GIS4WRF allows you to download datasets from
@@ -147,7 +142,7 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
         vbox.addLayout(hbox)
         gbox.setLayout(vbox)
 
-        return username, password, gbox
+        return rda_token_input, gbox
 
     def on_mpi_enabled_clicked(self) -> None:
         if not self.mpi_enabled.isChecked():
@@ -230,3 +225,4 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
     def get_dist_download_folder(self, name: str, mpi: bool) -> str:
         return os.path.join(self.options.distributions_dir, 
                             '{}-{}-{}'.format(name, WRF_WPS_DIST_VERSION, ('' if mpi else 'no') + 'mpi'))
+
