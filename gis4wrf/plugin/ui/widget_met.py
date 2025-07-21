@@ -11,9 +11,13 @@ from PyQt5.QtWidgets import (
 )
 
 
-from gis4wrf.core import (
-    met_datasets, get_met_products, is_met_dataset_downloaded, get_met_dataset_path, download_met_dataset,
-    CRS, UserError, logger)
+from gis4wrf.core.downloaders.datasets import met_datasets
+from gis4wrf.core.downloaders.met import (
+    get_met_products, is_met_dataset_downloaded, get_met_dataset_path, download_met_dataset)
+from gis4wrf.core.crs import CRS
+from gis4wrf.core import UserError 
+from gis4wrf.core import logger
+    
 from gis4wrf.plugin.options import get_options
 from gis4wrf.plugin.geo import rect_to_bbox
 from gis4wrf.plugin.broadcast import Broadcast
@@ -123,7 +127,7 @@ class MetToolsDownloadManager(QWidget):
         # Substitua campos de usuário/senha por campo para token
         self.rda_token_label = QLabel('Token da RDA:')
         self.rda_token_input = QLineEdit()
-        self.rda_token_input.setText(options.rda_token or '')
+        self.rda_token_input.setText(self.options.rda_token or '') # CORRECTED LINE
         vbox.addWidget(self.rda_token_label)
         vbox.addWidget(self.rda_token_input)
 
@@ -131,11 +135,12 @@ class MetToolsDownloadManager(QWidget):
         self.cbox_product.clear()
         dataset_name = self.cbox_dataset.currentData()
         if dataset_name is None:
-            return
-        auth = (self.options.rda_username, self.options.rda_password)
-        self.products = get_met_products(dataset_name, auth)
+           return
+        # CORREÇÃO: Use o token RDA para autenticação
+        auth = (self.options.rda_token, '')
+        self.products = get_met_products(dataset_name, self.options.rda_token)
         for product in self.products.keys():
-            self.cbox_product.addItem(product, product)
+           self.cbox_product.addItem(product, product)
 
     def on_product_changed(self, index: int):
         if index == -1:
@@ -194,7 +199,8 @@ class MetToolsDownloadManager(QWidget):
         lat_south = self.bottom.value()
         lon_west = self.left.value()
         lon_east = self.right.value()
-        auth = (self.options.rda_username, self.options.rda_password)
+         # CORREÇÃO: Use o token RDA para autenticação
+        auth = (self.options.rda_token, '')
 
         thread = TaskThread(
             lambda: download_met_dataset(self.options.met_dir, auth, 
