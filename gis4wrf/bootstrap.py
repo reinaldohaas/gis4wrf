@@ -40,7 +40,7 @@ Dependency = namedtuple('Dep', ['name', 'min', 'install'])
 DEPS = [
     # Direct dependencies.
 
-    Dependency('f90nml', install='1.0.2', min=None),
+    Dependency('f90nml', install='1.4.4', min=None),
 
     # Indirect dependencies.
     # Indirect dependencies are dependencies that we don't import directly in our code but
@@ -84,15 +84,45 @@ elif PY_MAJORMINOR == ('3', '9'):
             install='1.5.1',
             min=None),
     ]
-# best effort
-else:
+elif PY_MAJORMINOR == ('3', '10'):
     DEPS += [
         Dependency('netCDF4',
-            install='1.*',
+            install='1.6.5',
             min=None),
         # dependency of netCDF4
         Dependency('cftime',
-            install='1.*',
+            install='1.6.3',
+            min=None),
+    ]
+elif PY_MAJORMINOR == ('3', '11'):
+    DEPS += [
+        Dependency('netCDF4',
+            install='1.7.1',
+            min=None),
+        # dependency of netCDF4
+        Dependency('cftime',
+            install='1.6.3',
+            min=None),
+    ]
+elif PY_MAJORMINOR == ('3', '12'):
+    DEPS += [
+        Dependency('netCDF4',
+            install='1.7.4',
+            min=None),
+        # dependency of netCDF4
+        Dependency('cftime',
+            install='1.6.4',
+            min=None),
+    ]
+# best effort for future Python versions
+else:
+    DEPS += [
+        Dependency('netCDF4',
+            install='1.7.4',
+            min=None),
+        # dependency of netCDF4
+        Dependency('cftime',
+            install='1.6.4',
             min=None),
     ]
 
@@ -264,16 +294,3 @@ def run_subprocess(args: List[str], log_path: str) -> Iterable[str]:
 
     if process.returncode != 0:
         raise subprocess.CalledProcessError(process.returncode, args)
-
-import subprocess
-import sys
-
-def ensure_rda_apps_clients():
-    try:
-        import rda_apps_clients
-    except ImportError:
-        print("Instalando rda_apps_clients...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "rda_apps_clients"])
-        print("rda_apps_clients instalado com sucesso.")
-
-ensure_rda_apps_clients()
