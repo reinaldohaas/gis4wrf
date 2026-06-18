@@ -121,6 +121,10 @@ class MetToolsDownloadManager(QWidget):
         self.btn_download.clicked.connect(self.on_download_button_clicked)
         vbox.addWidget(self.btn_download)
 
+        self.status_label = QLabel('')
+        self.status_label.hide()
+        vbox.addWidget(self.status_label)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, PROGRESS_BAR_MAX)
         self.progress_bar.setTextVisible(False)
@@ -216,13 +220,18 @@ class MetToolsDownloadManager(QWidget):
         thread.start()
 
     def on_started_download(self) -> None:
-        self.btn_download.hide()
+        self.btn_download.setEnabled(False)
+        self.status_label.show()
         self.progress_bar.show()
         
     def on_progress_download(self, progress: float, status: str) -> None:
         bar_value = int(progress * PROGRESS_BAR_MAX)
         self.progress_bar.setValue(bar_value)
         self.progress_bar.repaint() # otherwise just updates in 1% steps
+        
+        self.status_label.setText(status)
+        self.status_label.repaint()
+
         if status == 'submitted':
             self.msg_bar.info('Met dataset download request submitted successfully, waiting until available for download...')
         elif status == 'ready':
@@ -230,7 +239,8 @@ class MetToolsDownloadManager(QWidget):
         logger.debug(f'Met data download: {progress*100:.1f}% - {status}')
     
     def on_finished_download(self) -> None:
-        self.btn_download.show()
+        self.btn_download.setEnabled(True)
+        self.status_label.hide()
         self.progress_bar.hide()
     
     def on_successful_download(self) -> None:
