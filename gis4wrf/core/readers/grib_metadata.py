@@ -37,7 +37,8 @@ def read_grib_folder_metadata(folder: str) -> Tuple[GribMetadata, List[GribMetad
 
 @export
 def read_grib_files_metadata(paths: List[str]) -> Tuple[GribMetadata, List[GribMetadata]]:
-    ''' Reads metadata of multiple GRIB files which must have non-overlapping time steps.
+    ''' Reads metadata of multiple GRIB files which may have overlapping time steps 
+        if they contain different variables (e.g. pressure vs surface levels).
         Returns aggregated and per-file metadata, where the latter are ordered by time.
     '''
     variables = {} # type: Dict[str,str]
@@ -48,13 +49,12 @@ def read_grib_files_metadata(paths: List[str]) -> Tuple[GribMetadata, List[GribM
         meta = read_grib_file_metadata(path)
         metas.append(meta)
         if not variables:
-            variables = meta.variables
+            variables = meta.variables.copy()
         else:
             variables.update(meta.variables)
-            assert not set(meta.times).intersection(times)
         times.extend(meta.times)
 
-    times.sort()
+    times = sorted(list(set(times)))
     metas.sort(key=lambda meta: meta.times)
 
     return GribMetadata(variables, times), metas
