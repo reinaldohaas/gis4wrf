@@ -38,7 +38,8 @@ class SimulationTab(QTabWidget):
         self.datasets_tab = DatasetsWidget(iface)
         self.run_tab = RunWidget(iface)
 
-        self.domain_tab.go_to_data_tab.connect(self.open_data_tab)
+        self.domain_tab.go_to_met_tab.connect(self.open_met_tab)
+        self.met_tab.go_to_data_tab.connect(self.open_data_tab)
         self.datasets_tab.go_to_run_tab.connect(self.open_run_tab)
         self.run_tab.view_wrf_nc_file.connect(self.view_wrf_nc_file)
 
@@ -58,6 +59,9 @@ class SimulationTab(QTabWidget):
         self.currentChanged.connect(self.on_tab_changed)
         Broadcast.options_updated.connect(self.update_project)
         Broadcast.open_project_from_object.connect(self.open_project_from_object)
+
+    def open_met_tab(self):
+        self.setCurrentIndex(2)
 
     def open_data_tab(self):
         self.setCurrentIndex(3)

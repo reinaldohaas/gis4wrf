@@ -2,7 +2,7 @@
 # Copyright (c) 2018 D. Meyer and M. Riechert. Licensed under MIT.
 
 
-from PyQt5.QtCore import Qt, QDate, QTime, QDateTime
+from PyQt5.QtCore import Qt, QDate, QTime, QDateTime, pyqtSignal
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QVBoxLayout, QGridLayout, QGroupBox, QLabel, QHBoxLayout, 
@@ -34,6 +34,9 @@ PROGRESS_BAR_MAX = 1000
 # TODO display bbox as vector layer if not global extent
 
 class MetToolsDownloadManager(QWidget):
+    tab_active = pyqtSignal()
+    go_to_data_tab = pyqtSignal()
+
     def __init__(self, iface) -> None:
         super().__init__()
 
@@ -124,7 +127,9 @@ class MetToolsDownloadManager(QWidget):
         self.progress_bar.hide()
         vbox.addWidget(self.progress_bar)
 
-
+        go_to_data_tab_btn = QPushButton('Continue to Datasets')
+        go_to_data_tab_btn.clicked.connect(self.go_to_data_tab)
+        vbox.addWidget(go_to_data_tab_btn)
 
     def on_dataset_changed(self, index: int):
         self.cbox_product.clear()

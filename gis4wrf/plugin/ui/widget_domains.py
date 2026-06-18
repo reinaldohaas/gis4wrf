@@ -37,7 +37,7 @@ HORIZONTAL_RESOLUTION_LABEL = 'Horizontal Resolution: {resolution} {unit}'
 
 class DomainWidget(QWidget):
     tab_active = pyqtSignal()
-    go_to_data_tab = pyqtSignal()
+    go_to_met_tab = pyqtSignal()
 
     def __init__(self, iface: QgisInterface) -> None:
         super().__init__()
@@ -199,8 +199,8 @@ class DomainWidget(QWidget):
         self.parent_vbox = QVBoxLayout()
         self.parent_vbox.setSizeConstraint(QLayout.SetMinimumSize)
 
-        go_to_data_tab_btn = QPushButton('Continue to Datasets')
-        go_to_data_tab_btn.clicked.connect(self.go_to_data_tab)
+        go_to_met_tab_btn = QPushButton('Continue to Met')
+        go_to_met_tab_btn.clicked.connect(self.go_to_met_tab)
 
         # Tabs
         dom_mgr_layout = QVBoxLayout()
@@ -211,7 +211,7 @@ class DomainWidget(QWidget):
         dom_mgr_layout.addWidget(self.group_box_manual_domain)
         dom_mgr_layout.addWidget(self.group_box_parent_domain)
         dom_mgr_layout.addLayout(self.parent_vbox)
-        dom_mgr_layout.addWidget(go_to_data_tab_btn)
+        dom_mgr_layout.addWidget(go_to_met_tab_btn)
         self.setLayout(dom_mgr_layout)
 
         QMetaObject.connectSlotsByName(self)
