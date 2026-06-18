@@ -16,6 +16,7 @@ from gis4wrf.plugin.ui.helpers import WhiteScroll, ensure_folder_empty
 from gis4wrf.plugin.ui.widget_general import GeneralWidget
 from gis4wrf.plugin.ui.widget_domains import DomainWidget
 from gis4wrf.plugin.ui.widget_datasets import DatasetsWidget
+from gis4wrf.plugin.ui.widget_met import MetToolsDownloadManager
 from gis4wrf.plugin.ui.widget_run import RunWidget
 
 class SimulationTab(QTabWidget):
@@ -33,6 +34,7 @@ class SimulationTab(QTabWidget):
         self.general_tab.create_project.connect(self.on_create_project)
         self.general_tab.close_project.connect(self.on_close_project)
         self.domain_tab = DomainWidget(iface)
+        self.met_tab = MetToolsDownloadManager(iface)
         self.datasets_tab = DatasetsWidget(iface)
         self.run_tab = RunWidget(iface)
 
@@ -42,10 +44,11 @@ class SimulationTab(QTabWidget):
 
         self.addTab(WhiteScroll(self.general_tab), 'General')
         self.addTab(WhiteScroll(self.domain_tab), 'Domain')
+        self.addTab(WhiteScroll(self.met_tab), 'Met')
         self.addTab(WhiteScroll(self.datasets_tab), 'Data')
         self.addTab(WhiteScroll(self.run_tab), 'Run')
 
-        self.tabs = [self.general_tab, self.domain_tab, self.datasets_tab, self.run_tab]
+        self.tabs = [self.general_tab, self.domain_tab, self.met_tab, self.datasets_tab, self.run_tab]
 
         self.disable_project_dependent_tabs()
 
@@ -57,10 +60,10 @@ class SimulationTab(QTabWidget):
         Broadcast.open_project_from_object.connect(self.open_project_from_object)
 
     def open_data_tab(self):
-        self.setCurrentIndex(2)
+        self.setCurrentIndex(3)
 
     def open_run_tab(self):
-        self.setCurrentIndex(3)
+        self.setCurrentIndex(4)
 
     def set_project_in_tabs(self) -> None:
         project = self.project

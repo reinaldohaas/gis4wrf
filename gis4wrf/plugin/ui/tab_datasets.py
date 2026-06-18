@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import QTabWidget
 
 from gis4wrf.plugin.ui.helpers import WhiteScroll
 from gis4wrf.plugin.ui.widget_geo import GeoToolsDownloadManager
-from gis4wrf.plugin.ui.widget_met import MetToolsDownloadManager
 from gis4wrf.plugin.ui.widget_process import Process
 
 
@@ -15,9 +14,7 @@ class DatasetsTab(QTabWidget):
         super().__init__()
 
         geo = WhiteScroll(GeoToolsDownloadManager(iface))
-        met = WhiteScroll(MetToolsDownloadManager(iface))
         process = WhiteScroll(Process(iface))
 
         self.addTab(geo, 'Geo')
-        self.addTab(met, 'Met')
         self.addTab(process, 'Process')
