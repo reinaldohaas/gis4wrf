@@ -41,6 +41,7 @@ DEPS = [
     # Direct dependencies.
 
     Dependency('f90nml', install='1.4.4', min=None),
+    Dependency('cdsapi', install='0.7.3', min=None),
 
     # Indirect dependencies.
     # Indirect dependencies are dependencies that we don't import directly in our code but
@@ -74,14 +75,23 @@ elif PY_MAJORMINOR == ('3', '7'):
             install='1.5.1',
             min=None),
     ]
+elif PY_MAJORMINOR == ('3', '8'):
+    DEPS += [
+        Dependency('netCDF4',
+            install='1.6.5',
+            min=None),
+        Dependency('cftime',
+            install='1.6.3',
+            min=None),
+    ]
 elif PY_MAJORMINOR == ('3', '9'):
     DEPS += [
         Dependency('netCDF4',
-            install='1.5.7',
+            install='1.6.5',
             min=None),
         # dependency of netCDF4
         Dependency('cftime',
-            install='1.5.1',
+            install='1.6.3',
             min=None),
     ]
 elif PY_MAJORMINOR == ('3', '10'):
@@ -97,19 +107,28 @@ elif PY_MAJORMINOR == ('3', '10'):
 elif PY_MAJORMINOR == ('3', '11'):
     DEPS += [
         Dependency('netCDF4',
-            install='1.7.1',
+            install='1.7.2',
             min=None),
         # dependency of netCDF4
         Dependency('cftime',
-            install='1.6.3',
+            install='1.6.4',
             min=None),
     ]
 elif PY_MAJORMINOR == ('3', '12'):
     DEPS += [
         Dependency('netCDF4',
-            install='1.7.4',
+            install='1.7.2',
             min=None),
         # dependency of netCDF4
+        Dependency('cftime',
+            install='1.6.4',
+            min=None),
+    ]
+elif PY_MAJORMINOR == ('3', '13'):
+    DEPS += [
+        Dependency('netCDF4',
+            install='1.7.5',
+            min=None),
         Dependency('cftime',
             install='1.6.4',
             min=None),
@@ -118,7 +137,7 @@ elif PY_MAJORMINOR == ('3', '12'):
 else:
     DEPS += [
         Dependency('netCDF4',
-            install='1.7.4',
+            install='1.7.5',
             min=None),
         # dependency of netCDF4
         Dependency('cftime',

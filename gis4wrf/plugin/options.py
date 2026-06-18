@@ -20,7 +20,7 @@ class Keys(object):
     WPS_DIR = SETTINGS_NAMESPACE + 'wps_dir'
     MPI_ENABLED = SETTINGS_NAMESPACE + 'mpi_enabled'
     MPI_PROCESSES = SETTINGS_NAMESPACE + 'mpi_processes'
-    RDA_TOKEN = SETTINGS_NAMESPACE + 'rda_token'  # Alterado para token
+    CDS_KEY = SETTINGS_NAMESPACE + 'cds_key'
 
 class Options(object):
     def __init__(self) -> None:
@@ -57,7 +57,7 @@ class Options(object):
         self._mpi_enabled = settings.value(Keys.MPI_ENABLED, False, type=bool)
         self._mpi_processes = settings.value(Keys.MPI_PROCESSES, multiprocessing.cpu_count(), type=int)
 
-        self._rda_token = settings.value(Keys.RDA_TOKEN)  # Carrega token
+        self._cds_key = settings.value(Keys.CDS_KEY)
 
         # Proactively enable MPI if available and if no WRF/WPS distributions are set yet.
         if not self._mpi_enabled and not self._wrf_dir and not self._wps_dir:
@@ -80,7 +80,7 @@ class Options(object):
         settings.setValue(Keys.MPI_PROCESSES, self._mpi_processes)
         settings.setValue(Keys.WRF_DIR, self._wrf_dir)
         settings.setValue(Keys.WPS_DIR, self._wps_dir)
-        settings.setValue(Keys.RDA_TOKEN, self._rda_token)  # Salva token
+        settings.setValue(Keys.CDS_KEY, self._cds_key)
         self.after_load_save()
         Broadcast.options_updated.emit()
 
@@ -191,12 +191,12 @@ class Options(object):
         return os.path.join(self.wrf_dir, 'test', 'em_real', 'namelist.input')
 
     @property
-    def rda_token(self) -> str:
-        return self._rda_token
+    def cds_key(self) -> str:
+        return self._cds_key
 
-    @rda_token.setter
-    def rda_token(self, token: str) -> None:
-        self._rda_token = token
+    @cds_key.setter
+    def cds_key(self, key: str) -> None:
+        self._cds_key = key
 
     @property
     def projects_dir(self) -> str:

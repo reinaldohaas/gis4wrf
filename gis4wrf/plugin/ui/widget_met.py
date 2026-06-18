@@ -125,20 +125,20 @@ class MetToolsDownloadManager(QWidget):
         vbox.addWidget(self.progress_bar)
 
         # Substitua campos de usuário/senha por campo para token
-        self.rda_token_label = QLabel('Token da RDA:')
-        self.rda_token_input = QLineEdit()
-        self.rda_token_input.setText(self.options.rda_token or '') # CORRECTED LINE
-        vbox.addWidget(self.rda_token_label)
-        vbox.addWidget(self.rda_token_input)
+        self.cds_key_label = QLabel('Copernicus CDS API Key (UID:Key):')
+        self.cds_key_input = QLineEdit()
+        self.cds_key_input.setText(self.options.cds_key or '')
+        vbox.addWidget(self.cds_key_label)
+        vbox.addWidget(self.cds_key_input)
 
     def on_dataset_changed(self, index: int):
         self.cbox_product.clear()
         dataset_name = self.cbox_dataset.currentData()
         if dataset_name is None:
            return
-        # CORREÇÃO: Use o token RDA para autenticação
-        auth = (self.options.rda_token, '')
-        self.products = get_met_products(dataset_name, self.options.rda_token)
+        # Use o token CDS para autenticação
+        auth = (self.options.cds_key, '')
+        self.products = get_met_products(dataset_name, self.options.cds_key)
         for product in self.products.keys():
            self.cbox_product.addItem(product, product)
 
@@ -199,8 +199,8 @@ class MetToolsDownloadManager(QWidget):
         lat_south = self.bottom.value()
         lon_west = self.left.value()
         lon_east = self.right.value()
-         # CORREÇÃO: Use o token RDA para autenticação
-        auth = (self.options.rda_token, '')
+         # Use o token CDS para autenticação
+        auth = (self.options.cds_key, '')
 
         thread = TaskThread(
             lambda: download_met_dataset(self.options.met_dir, auth, 
@@ -255,9 +255,25 @@ class MetToolsDownloadManager(QWidget):
             self.bottom.setDisabled(False)
             self.left.setDisabled(False)
             self.right.setDisabled(False)
+            # Auto-populate if fields are currently at global defaults
+            try:
+                is_default = (float(self.top.value()) == 90.0 and float(self.bottom.value()) == -90.0 and
+                              float(self.left.value()) == -180.0 and float(self.right.value()) == 180.0)
+            except:
+                is_default = True
+            if is_default:
+                self.on_extent_from_active_layer_button_clicked()
 
     def on_extent_from_active_layer_button_clicked(self):
-        layer = self.iface.activeLayer() # type: Optional[QgsMapLayer]
+        from qgis.core import QgsProject
+        # Target explicitly the largest domain (Domain 1)
+        layers = QgsProject.instance().mapLayersByName('Domain 1')
+        if layers:
+            layer = layers[0]
+        else:
+            # Fallback to the active layer if Domain 1 is not found
+            layer = self.iface.activeLayer()
+
         if layer is None:
             return
         layer_crs = CRS(layer.crs().toProj4())
@@ -266,10 +282,10 @@ class MetToolsDownloadManager(QWidget):
         bbox = rect_to_bbox(extent)
         bbox_geo = layer_crs.transform_bbox(bbox, target_crs.srs)
         padding = 5 # degrees
-        lat_south = max(bbox_geo.miny - 5, -90)
-        lat_north = min(bbox_geo.maxy + 5, 90)
-        lon_west = max(bbox_geo.minx - 5, -180)
-        lon_east = min(bbox_geo.maxx + 5, 180)
+        lat_south = max(bbox_geo.miny - padding, -90)
+        lat_north = min(bbox_geo.maxy + padding, 90)
+        lon_west = max(bbox_geo.minx - padding, -180)
+        lon_east = min(bbox_geo.maxx + padding, 180)
         self.bottom.set_value(lat_south)
         self.top.set_value(lat_north)
         self.left.set_value(lon_west)
@@ -277,5 +293,5 @@ class MetToolsDownloadManager(QWidget):
 
     # Ao salvar opções:
     def save_options(self):
-        options.rda_token = self.rda_token_input.text()
-        options.save()
+        self.options.cds_key = self.cds_key_input.text()
+        self.options.save()

@@ -53,7 +53,7 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
             self.create_distribution_box()
         self.vbox.addWidget(gbox)
 
-        self.rda_token_input, gbox = self.create_rda_auth_input()
+        self.cds_key_input, gbox = self.create_cds_auth_input()
         self.vbox.addWidget(gbox)
 
         self.vbox.addStretch()
@@ -65,7 +65,7 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
         self.options.mpi_processes = self.mpi_processes.value()
         self.options.wrf_dir = self.wrf_dir.text()
         self.options.wps_dir = self.wps_dir.text()
-        self.options.rda_token = self.rda_token_input.text()
+        self.options.cds_key = self.cds_key_input.text()
         self.options.save()
 
     def create_distribution_box(self) -> Tuple[QCheckBox, QSpinBox, QLineEdit, QLineEdit, QGroupBox]:
@@ -120,20 +120,19 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
 
         return mpi_enabled, mpi_processes, wps_dir, wrf_dir, gbox
 
-    def create_rda_auth_input(self) -> Tuple[QLineEdit, QGroupBox]:
-        rda_token_input = QLineEdit(self.options.rda_token)
+    def create_cds_auth_input(self) -> Tuple[QLineEdit, QGroupBox]:
+        cds_key_input = QLineEdit(self.options.cds_key)
 
         hbox = QHBoxLayout()
-        hbox.addWidget(QLabel("RDA Token:"))
-        hbox.addWidget(rda_token_input)
+        hbox.addWidget(QLabel("CDS API Key (UID:Key):"))
+        hbox.addWidget(cds_key_input)
 
-        gbox = QGroupBox("NCAR's Research Data Archive (RDA)")
-        text = """<html>GIS4WRF allows you to download datasets from
-                <a href="https://rda.ucar.edu/">NCAR's Reseach Data Archive (RDA)</a>
-                through the use of its API. If you do not have an RDA account, you need to
-                <a href="https://rda.ucar.edu/index.html?hash=data_user&amp;action=register">register for a Data Account</a> first.
-                Once you have completed your registration and your account is live you can save your log-in information to download meteorological
-                data from GIS4WRF > Datasets > Met.</html>"""
+        gbox = QGroupBox("Copernicus Climate Data Store (CDS)")
+        text = """<html>GIS4WRF allows you to download ERA5 datasets from
+                <a href="https://cds.climate.copernicus.eu/">Copernicus Climate Data Store (CDS)</a>.
+                If you do not have a CDS account, you need to
+                <a href="https://cds.climate.copernicus.eu/user/register">register for an account</a> first.
+                Once registered, copy your API Key (in the format <code>UID:Key</code>) from your CDS profile and paste it below.</html>"""
         label = QLabel(text)
         label.setWordWrap(True)
         label.setOpenExternalLinks(True)
@@ -142,7 +141,7 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
         vbox.addLayout(hbox)
         gbox.setLayout(vbox)
 
-        return rda_token_input, gbox
+        return cds_key_input, gbox
 
     def on_mpi_enabled_clicked(self) -> None:
         if not self.mpi_enabled.isChecked():
