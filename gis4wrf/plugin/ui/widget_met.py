@@ -133,6 +133,11 @@ class MetToolsDownloadManager(QWidget):
         self.status_label.hide()
         vbox.addWidget(self.status_label)
 
+        self.btn_check_status = QPushButton('Check Status of Last Request')
+        self.btn_check_status.hide()
+        self.btn_check_status.clicked.connect(self.on_check_status_clicked)
+        vbox.addWidget(self.btn_check_status)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, PROGRESS_BAR_MAX)
         self.progress_bar.setTextVisible(False)
@@ -233,6 +238,7 @@ class MetToolsDownloadManager(QWidget):
     def on_started_download(self) -> None:
         self.btn_download.setEnabled(False)
         self.status_label.show()
+        self.btn_check_status.show()
         self.progress_bar.show()
         
     def on_progress_download(self, progress: float, status: str) -> None:
@@ -242,12 +248,38 @@ class MetToolsDownloadManager(QWidget):
         
         self.status_label.setText(status)
         self.status_label.repaint()
+        
+        if status.startswith("[") and "] " in status:
+            self.current_req_id = status.split("] ")[0][1:]
 
         if status == 'submitted':
             self.msg_bar.info('Met dataset download request submitted successfully, waiting until available for download...')
         elif status == 'ready':
             self.msg_bar.info('Met dataset download request is now ready, downloading...')
         logger.debug(f'Met data download: {progress*100:.1f}% - {status}')
+
+    def on_check_status_clicked(self) -> None:
+        if not hasattr(self, 'current_req_id') or not self.current_req_id:
+            QMessageBox.information(self, "Status", "Nenhum Request ID encontrado no momento.")
+            return
+            
+        import requests
+        url = f"https://cds.climate.copernicus.eu/api/retrieve/v1/jobs/{self.current_req_id}"
+        headers = {"PRIVATE-TOKEN": self.options.cds_key}
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code in (200, 202, 201):
+                data = resp.json()
+                msg = f"Request ID: {self.current_req_id}\n\n"
+                msg += f"Status: {data.get('status', 'Unknown')}\n"
+                msg += f"Created: {data.get('created', 'Unknown')}\n"
+                if data.get('status') == 'successful':
+                    msg += "\n\nO processo foi concluído no servidor do Copernicus!\nEle estará fazendo o download para o seu disco em breve."
+                QMessageBox.information(self, "Copernicus Status", msg)
+            else:
+                QMessageBox.warning(self, "Copernicus API", f"A API retornou status {resp.status_code}\n\nIsso pode ocorrer se a requisição ainda estiver na fila ou for antiga.\n\nDetalhes:\n{resp.text}")
+        except Exception as e:
+            QMessageBox.warning(self, "Erro de Conexão", str(e))
     
     def on_finished_download(self) -> None:
         self.btn_download.setEnabled(True)
