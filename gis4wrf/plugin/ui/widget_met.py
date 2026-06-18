@@ -265,7 +265,10 @@ class MetToolsDownloadManager(QWidget):
             
         import requests
         url = f"https://cds.climate.copernicus.eu/api/retrieve/v1/jobs/{self.current_req_id}"
-        headers = {"PRIVATE-TOKEN": self.options.cds_key}
+        headers = {
+            "Authorization": f"Bearer {self.options.cds_key}",
+            "PRIVATE-TOKEN": self.options.cds_key
+        }
         try:
             resp = requests.get(url, headers=headers, timeout=10)
             if resp.status_code in (200, 202, 201):
