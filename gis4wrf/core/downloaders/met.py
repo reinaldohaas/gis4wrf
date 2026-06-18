@@ -89,68 +89,78 @@ def download_met_dataset(base_dir: Union[str,Path], auth: tuple,
     # Compute date parameters
     delta = end_date - start_date
     days_list = [start_date + timedelta(days=i) for i in range(delta.days + 1)]
-    years = sorted(list(set(d.strftime('%Y') for d in days_list)))
-    months = sorted(list(set(d.strftime('%m') for d in days_list)))
-    days = sorted(list(set(d.strftime('%d') for d in days_list)))
+    
+    # Group days by year and month to chunk requests and avoid CDS limits
+    from collections import defaultdict
+    year_month_days = defaultdict(list)
+    for d in days_list:
+        year_month_days[(d.strftime('%Y'), d.strftime('%m'))].append(d.strftime('%d'))
+
     times = ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00']
 
     # Bounding box / area (North, West, South, East)
     area = [lat_north, lon_west, lat_south, lon_east]
 
-    num_steps = len(param_names)
-    for idx, param in enumerate(param_names):
-        step_progress = idx / num_steps
-        yield step_progress + 0.05, f"Requesting {param} from Copernicus..."
+    num_steps = len(param_names) * len(year_month_days)
+    step_count = 0
 
-        if param == "pressure-levels":
-            output_file = path / f"era5_pressure_{start_date.strftime('%Y%m%d')}.grib"
-            client.retrieve(
-                'reanalysis-era5-pressure-levels',
-                {
-                    'product_type': 'reanalysis',
-                    'format': 'grib',
-                    'variable': [
-                        'geopotential', 'relative_humidity', 'temperature',
-                        'u_component_of_wind', 'v_component_of_wind',
-                    ],
-                    'pressure_level': [
-                        '1', '2', '3', '5', '7', '10', '20', '30', '50', '70',
-                        '100', '125', '150', '175', '200', '225', '250', '300',
-                        '350', '400', '450', '500', '550', '600', '650', '700',
-                        '750', '775', '800', '825', '850', '875', '900', '925',
-                        '950', '975', '1000',
-                    ],
-                    'year': years,
-                    'month': months,
-                    'day': days,
-                    'time': times,
-                    'area': area,
-                },
-                str(output_file)
-            )
-        elif param == "single-levels":
-            output_file = path / f"era5_surface_{start_date.strftime('%Y%m%d')}.grib"
-            client.retrieve(
-                'reanalysis-era5-single-levels',
-                {
-                    'product_type': 'reanalysis',
-                    'format': 'grib',
-                    'variable': [
-                        '10m_u_component_of_wind', '10m_v_component_of_wind', '2m_dewpoint_temperature',
-                        '2m_temperature', 'land_sea_mask', 'mean_sea_level_pressure',
-                        'sea_ice_cover', 'sea_surface_temperature', 'skin_temperature',
-                        'snow_depth', 'soil_temperature_level_1', 'soil_temperature_level_2',
-                        'soil_temperature_level_3', 'soil_temperature_level_4', 'surface_pressure',
-                        'volumetric_soil_water_layer_1', 'volumetric_soil_water_layer_2',
-                        'volumetric_soil_water_layer_3', 'volumetric_soil_water_layer_4',
-                    ],
-                    'year': years,
-                    'month': months,
-                    'day': days,
-                    'time': times,
-                    'area': area,
-                },
-                str(output_file)
-            )
+    for param in param_names:
+        for (year, month), days_in_month in year_month_days.items():
+            step_progress = step_count / num_steps
+            yield step_progress + 0.05, f"Requesting {param} for {year}-{month}..."
+            
+            days = sorted(list(set(days_in_month)))
+
+            if param == "pressure-levels":
+                output_file = path / f"era5_pressure_{year}{month}.grib"
+                client.retrieve(
+                    'reanalysis-era5-pressure-levels',
+                    {
+                        'product_type': 'reanalysis',
+                        'format': 'grib',
+                        'variable': [
+                            'geopotential', 'relative_humidity', 'temperature',
+                            'u_component_of_wind', 'v_component_of_wind',
+                        ],
+                        'pressure_level': [
+                            '1', '2', '3', '5', '7', '10', '20', '30', '50', '70',
+                            '100', '125', '150', '175', '200', '225', '250', '300',
+                            '350', '400', '450', '500', '550', '600', '650', '700',
+                            '750', '775', '800', '825', '850', '875', '900', '925',
+                            '950', '975', '1000',
+                        ],
+                        'year': year,
+                        'month': month,
+                        'day': days,
+                        'time': times,
+                        'area': area,
+                    },
+                    str(output_file)
+                )
+            elif param == "single-levels":
+                output_file = path / f"era5_surface_{year}{month}.grib"
+                client.retrieve(
+                    'reanalysis-era5-single-levels',
+                    {
+                        'product_type': 'reanalysis',
+                        'format': 'grib',
+                        'variable': [
+                            '10m_u_component_of_wind', '10m_v_component_of_wind', '2m_dewpoint_temperature',
+                            '2m_temperature', 'land_sea_mask', 'mean_sea_level_pressure',
+                            'sea_ice_cover', 'sea_surface_temperature', 'skin_temperature',
+                            'snow_depth', 'soil_temperature_level_1', 'soil_temperature_level_2',
+                            'soil_temperature_level_3', 'soil_temperature_level_4', 'surface_pressure',
+                            'volumetric_soil_water_layer_1', 'volumetric_soil_water_layer_2',
+                            'volumetric_soil_water_layer_3', 'volumetric_soil_water_layer_4',
+                        ],
+                        'year': year,
+                        'month': month,
+                        'day': days,
+                        'time': times,
+                        'area': area,
+                    },
+                    str(output_file)
+                )
+            step_count += 1
 
     yield 1.0, "ERA5 download complete"
