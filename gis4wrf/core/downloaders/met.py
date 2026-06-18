@@ -84,36 +84,54 @@ def download_met_dataset(base_dir: Union[str,Path], auth: tuple,
     if sys.stdout is None:
         sys.stdout = DummyStream()
 
-    client = cdsapi.Client(url="https://cds.climate.copernicus.eu/api", key=cds_key, quiet=True)
+    import time
+    client = cdsapi.Client(url="https://cds.climate.copernicus.eu/api", key=cds_key, quiet=True, wait_until_complete=False)
 
-    # Compute date parameters
-    delta = end_date - start_date
-    days_list = [start_date + timedelta(days=i) for i in range(delta.days + 1)]
+    # Compute datetimes exactly as requested based on interval
+    current_date = start_date
+    all_datetimes = []
+    while current_date <= end_date:
+        all_datetimes.append(current_date)
+        current_date += timedelta(hours=interval_hours)
     
-    # Group days by year and month to chunk requests and avoid CDS limits
+    # Group datetimes by year, month, and day to chunk requests
     from collections import defaultdict
-    year_month_days = defaultdict(list)
-    for d in days_list:
-        year_month_days[(d.strftime('%Y'), d.strftime('%m'))].append(d.strftime('%d'))
-
-    times = [f"{h:02d}:00" for h in range(0, 24, interval_hours)]
+    year_month_datetime_map = defaultdict(lambda: defaultdict(list))
+    for dt in all_datetimes:
+        year_month_datetime_map[(dt.strftime('%Y'), dt.strftime('%m'))][dt.strftime('%d')].append(dt.strftime('%H:%M'))
 
     # Bounding box / area (North, West, South, East)
     area = [lat_north, lon_west, lat_south, lon_east]
 
-    num_steps = len(param_names) * len(year_month_days)
+    num_steps = len(param_names) * len(year_month_datetime_map)
     step_count = 0
 
     for param in param_names:
-        for (year, month), days_in_month in year_month_days.items():
+        for (year, month), days_dict in year_month_datetime_map.items():
             step_progress = step_count / num_steps
             yield step_progress + 0.05, f"Requesting {param} for {year}-{month}..."
             
-            days = sorted(list(set(days_in_month)))
+            days = sorted(list(days_dict.keys()))
+            times = sorted(list(set(t for d_times in days_dict.values() for t in d_times)))
+
+            def do_retrieve(collection, request, out_path):
+                remote = client.retrieve(collection, request, target=None)
+                while True:
+                    try:
+                        ready = remote.results_ready
+                    except Exception as e:
+                        # Sometimes errors can happen during status check, raise them to fail the task
+                        raise e
+                    if ready:
+                        break
+                    status = remote.status
+                    yield step_progress + 0.05, f"Requesting {param} for {year}-{month}... ({status})"
+                    time.sleep(2.0)
+                remote.download(str(out_path))
 
             if param == "pressure-levels":
                 output_file = path / f"era5_pressure_{year}{month}.grib"
-                client.retrieve(
+                yield from do_retrieve(
                     'reanalysis-era5-pressure-levels',
                     {
                         'product_type': 'reanalysis',
@@ -135,11 +153,11 @@ def download_met_dataset(base_dir: Union[str,Path], auth: tuple,
                         'time': times,
                         'area': area,
                     },
-                    str(output_file)
+                    output_file
                 )
             elif param == "single-levels":
                 output_file = path / f"era5_surface_{year}{month}.grib"
-                client.retrieve(
+                yield from do_retrieve(
                     'reanalysis-era5-single-levels',
                     {
                         'product_type': 'reanalysis',
@@ -159,7 +177,7 @@ def download_met_dataset(base_dir: Union[str,Path], auth: tuple,
                         'time': times,
                         'area': area,
                     },
-                    str(output_file)
+                    output_file
                 )
             step_count += 1
 
