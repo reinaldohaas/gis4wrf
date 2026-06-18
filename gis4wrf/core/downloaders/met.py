@@ -64,8 +64,8 @@ def get_met_products(dataset_name: str, cds_key: str) -> dict:
 def download_met_dataset(base_dir: Union[str,Path], auth: tuple,
                          dataset_name: str, product_name: str, param_names: List[str],
                          start_date: datetime, end_date: datetime,
-                         lat_south: float, lat_north: float, lon_west: float, lon_east: float
-                         ) -> Iterable[Tuple[float,str]]:
+                         lat_south: float, lat_north: float, lon_west: float, lon_east: float,
+                         interval_hours: int = 3) -> Iterable[Tuple[float,str]]:
     path = get_met_dataset_path(base_dir, dataset_name, product_name, start_date, end_date)
 
     if path.exists():
@@ -96,7 +96,7 @@ def download_met_dataset(base_dir: Union[str,Path], auth: tuple,
     for d in days_list:
         year_month_days[(d.strftime('%Y'), d.strftime('%m'))].append(d.strftime('%d'))
 
-    times = ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00']
+    times = [f"{h:02d}:00" for h in range(0, 24, interval_hours)]
 
     # Bounding box / area (North, West, South, East)
     area = [lat_north, lon_west, lat_south, lon_east]

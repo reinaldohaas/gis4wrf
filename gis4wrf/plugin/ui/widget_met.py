@@ -7,7 +7,7 @@ from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QVBoxLayout, QGridLayout, QGroupBox, QLabel, QHBoxLayout, 
     QComboBox, QRadioButton, QTreeWidget, QTreeWidgetItem, QDateTimeEdit, QTreeWidgetItemIterator,
-    QListWidget, QListWidgetItem, QProgressBar, QMessageBox, QLineEdit
+    QListWidget, QListWidgetItem, QProgressBar, QMessageBox, QLineEdit, QSpinBox
 )
 
 
@@ -79,6 +79,14 @@ class MetToolsDownloadManager(QWidget):
         self.dedit_end_date.setCalendarPopup(True)
         hbox_end_datetime.addWidget(QLabel('End: '))
         hbox_end_datetime.addWidget(self.dedit_end_date)
+
+        hbox_interval = QHBoxLayout()
+        vbox.addLayout(hbox_interval)
+        self.spin_interval = QSpinBox()
+        self.spin_interval.setRange(1, 24)
+        self.spin_interval.setValue(3)
+        hbox_interval.addWidget(QLabel('Interval (hours): '))
+        hbox_interval.addWidget(self.spin_interval)
 
         gbox_extent = QGroupBox('Extent')
         vbox.addWidget(gbox_extent)
@@ -206,11 +214,14 @@ class MetToolsDownloadManager(QWidget):
          # Use o token CDS para autenticação
         auth = (self.options.cds_key, '')
 
+        interval_hours = self.spin_interval.value()
+
         thread = TaskThread(
             lambda: download_met_dataset(self.options.met_dir, auth, 
                                          dataset_name, product_name, param_names,
                                          start_date, end_date,
-                                         lat_south, lat_north, lon_west, lon_east),
+                                         lat_south, lat_north, lon_west, lon_east,
+                                         interval_hours=interval_hours),
             yields_progress=True)
         thread.started.connect(self.on_started_download)
         thread.progress.connect(self.on_progress_download)
