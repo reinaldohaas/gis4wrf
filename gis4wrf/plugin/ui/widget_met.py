@@ -124,12 +124,7 @@ class MetToolsDownloadManager(QWidget):
         self.progress_bar.hide()
         vbox.addWidget(self.progress_bar)
 
-        # Substitua campos de usuário/senha por campo para token
-        self.cds_key_label = QLabel('Copernicus CDS API Key (UID:Key):')
-        self.cds_key_input = QLineEdit()
-        self.cds_key_input.setText(self.options.cds_key or '')
-        vbox.addWidget(self.cds_key_label)
-        vbox.addWidget(self.cds_key_input)
+
 
     def on_dataset_changed(self, index: int):
         self.cbox_product.clear()
