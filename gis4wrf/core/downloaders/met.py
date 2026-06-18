@@ -116,17 +116,23 @@ def download_met_dataset(base_dir: Union[str,Path], auth: tuple,
 
             def do_retrieve(collection, request, out_path):
                 remote = client.retrieve(collection, request, target=None)
+                req_id = remote.request_uid
                 while True:
                     try:
+                        status = remote.status
                         ready = remote.results_ready
                     except Exception as e:
-                        # Sometimes errors can happen during status check, raise them to fail the task
-                        raise e
+                        # Handle transient CDS API errors (e.g. 502 Bad Gateway) during polling
+                        status = "checking... (API timeout/error, retrying)"
+                        ready = False
+
+                    yield step_progress + 0.05, f"[{req_id}] Requesting {param} for {year}-{month}... ({status})"
+                    
                     if ready:
                         break
-                    status = remote.status
-                    yield step_progress + 0.05, f"Requesting {param} for {year}-{month}... ({status})"
                     time.sleep(2.0)
+                
+                yield step_progress + 0.05, f"[{req_id}] Downloading {param} for {year}-{month} to disk..."
                 remote.download(str(out_path))
 
             if param == "pressure-levels":
