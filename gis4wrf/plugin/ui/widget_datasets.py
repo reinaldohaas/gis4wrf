@@ -651,9 +651,11 @@ class DatasetsWidget(QWidget):
                     return
 
                 time_range = '{} - {}'.format(*map(lambda d: d.strftime('%Y-%m-%d %H:%M'), folder_meta.time_range))
+                folder_name = os.path.basename(time_range_folder_path)
+                display_text = f"{time_range}  [{folder_name}]"
             
                 time_range_item = QTreeWidgetItem(parent_item)
-                time_range_item.setText(0, time_range)
+                time_range_item.setText(0, display_text)
                 time_range_item.setToolTip(0, time_range_folder_path)
                 time_range_item.setData(0, Qt.UserRole, time_range_folder_path)
 
@@ -673,7 +675,7 @@ class DatasetsWidget(QWidget):
                 if not os.path.isdir(product_folder):
                     continue
 
-                has_grib = any(f.endswith('.grib') or f.endswith('.grb') for f in os.listdir(product_folder))
+                has_grib = any(f.lower().endswith(ext) for f in os.listdir(product_folder) for ext in ['.grib', '.grb', '.grib1', '.grib2'])
                 if has_grib:
                     # Treat this level as time_range (2-level hierarchy like user's old era5 setup)
                     add_time_range_item(dataset_item, product_folder)
