@@ -256,15 +256,11 @@ class MetToolsDownloadManager(QWidget):
         self.status_label.repaint()
         
         if status.startswith("[") and "] " in status:
-            self.current_req_id = status.split("] ")[0][1:]
-            import re
-            match = re.search(r"Request ID: ([0-9a-fA-F-]+)", status)
-            if match:
-                req_id = match.group(1)
-                if not hasattr(self, 'current_req_ids'):
-                    self.current_req_ids = []
-                if req_id not in self.current_req_ids:
-                    self.current_req_ids.append(req_id)
+            req_id = status.split("] ")[0][1:]
+            if not hasattr(self, 'current_req_ids'):
+                self.current_req_ids = []
+            if req_id not in self.current_req_ids:
+                self.current_req_ids.append(req_id)
 
         if status == 'submitted':
             self.msg_bar.info('Met dataset download request submitted successfully, waiting until available for download...')

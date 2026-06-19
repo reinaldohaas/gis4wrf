@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sysconfig
 import site
-import pkg_resources
+# import pkg_resources
 import random
 
 DID_BOOTSTRAP = False
@@ -168,6 +168,7 @@ def bootstrap() -> Iterable[Tuple[str,Any]]:
     if DID_BOOTSTRAP:
         return
     DID_BOOTSTRAP = True
+    return
 
     # Add custom folder to search path.
     for path in site.getsitepackages(prefixes=[INSTALL_PREFIX]):

@@ -123,7 +123,7 @@ def download_met_dataset(base_dir: Union[str,Path], auth: tuple,
 
             def do_retrieve(collection, request, out_path):
                 remote = client.retrieve(collection, request, target=None)
-                req_id = remote.request_uid
+                req_id = getattr(remote, 'request_id', getattr(remote, 'request_uid', 'unknown'))
                 while True:
                     try:
                         status = remote.status
