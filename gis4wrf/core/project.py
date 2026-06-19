@@ -88,6 +88,7 @@ class Project(object):
     def save(self) -> None:
         if not self.path:
             return
+        os.makedirs(self.path, exist_ok=True)
         with open((os.path.join(self.path, PROJECT_FILENAME)), 'w') as fp:
             json.dump(self.data, fp, indent=4, cls=ProjectJSONEncoder)
 
