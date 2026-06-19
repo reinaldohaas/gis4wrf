@@ -278,9 +278,14 @@ class MetToolsDownloadManager(QWidget):
         status_messages = []
         for req_id in self.current_req_ids:
             url = f"https://cds.climate.copernicus.eu/api/retrieve/v1/jobs/{req_id}"
-            headers = {
-                "Authorization": f"Bearer {self.options.cds_key}"
-            }
+            headers = {}
+            if ":" in self.options.cds_key:
+                import base64
+                b64_key = base64.b64encode(self.options.cds_key.encode('utf-8')).decode('utf-8')
+                headers["Authorization"] = f"Basic {b64_key}"
+            else:
+                headers["PRIVATE-TOKEN"] = self.options.cds_key
+                headers["Authorization"] = f"Bearer {self.options.cds_key}"
             try:
                 r = requests.get(url, headers=headers, timeout=10)
                 data = r.json()
