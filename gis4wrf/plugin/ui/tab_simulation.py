@@ -78,6 +78,7 @@ class SimulationTab(QTabWidget):
             self.update_project()
         self.general_tab.project = project
         self.domain_tab.project = project
+        self.met_tab.project = project
         self.datasets_tab.project = project
         self.run_tab.project = project
 

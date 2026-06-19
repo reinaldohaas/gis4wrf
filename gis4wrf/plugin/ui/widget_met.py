@@ -43,6 +43,7 @@ class MetToolsDownloadManager(QWidget):
         self.iface = iface
         self.options = get_options()
         self.msg_bar = MessageBar(iface)
+        self.project = None
 
         vbox = QVBoxLayout()
         self.setLayout(vbox)
@@ -221,6 +222,10 @@ class MetToolsDownloadManager(QWidget):
 
         interval_hours = self.spin_interval.value()
 
+        self.last_download_path = get_met_dataset_path(*args)
+        self.last_dataset_name = dataset_name
+        self.last_product_name = product_name
+
         thread = TaskThread(
             lambda: download_met_dataset(self.options.met_dir, auth, 
                                          dataset_name, product_name, param_names,
@@ -292,6 +297,22 @@ class MetToolsDownloadManager(QWidget):
     def on_successful_download(self) -> None:
         self.msg_bar.success('Meteorological dataset downloaded successfully.')
         Broadcast.met_datasets_updated.emit()
+        
+        try:
+            if getattr(self, 'project', None) is not None and hasattr(self, 'last_download_path'):
+                from gis4wrf.core import read_grib_folder_metadata
+                meta_all, meta_files = read_grib_folder_metadata(str(self.last_download_path))
+                self.project.met_dataset_spec = {
+                    'paths': [meta.path for meta in meta_files],
+                    'dataset': self.last_dataset_name,
+                    'product': self.last_product_name,
+                    'time_range': meta_all.time_range,
+                    'interval_seconds': meta_all.interval_seconds
+                }
+                Broadcast.project_updated.emit()
+                self.msg_bar.success('As datas do projeto WPS/WRF foram sincronizadas automaticamente com o dataset recém-baixado!')
+        except Exception as e:
+            logger.error(f"Error auto-linking downloaded dataset: {e}")
 
     def on_extent_radio_button_clicked(self):
         if self.radio_global.isChecked():
