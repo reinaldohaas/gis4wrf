@@ -30,17 +30,24 @@ DATE_FORMAT = '%Y%m%d%H%M'
 
 @export
 def get_met_dataset_path(base_dir: Union[str,Path], dataset_name: str, product_name: str,
-                         start_date: datetime, end_date: datetime) -> Path:
-    datetime_range = '{}-{}'.format(start_date.strftime(DATE_FORMAT), end_date.strftime(DATE_FORMAT))
+                         start_date: datetime, end_date: datetime, interval_hours: int = None) -> Path:
+    if interval_hours is not None:
+        datetime_range = '{}-{}h-{}'.format(start_date.strftime(DATE_FORMAT), interval_hours, end_date.strftime(DATE_FORMAT))
+    else:
+        datetime_range = '{}-{}'.format(start_date.strftime(DATE_FORMAT), end_date.strftime(DATE_FORMAT))
+    
     base_dir = Path(base_dir)
-    product_dir = base_dir / dataset_name / product_name
-    path = product_dir / datetime_range
+    if dataset_name == 'era5':
+        path = base_dir / dataset_name / datetime_range
+    else:
+        product_dir = base_dir / dataset_name / product_name
+        path = product_dir / datetime_range
     return path
 
 @export
 def is_met_dataset_downloaded(base_dir: Union[str,Path], dataset_name: str, product_name: str,
-                               start_date: datetime, end_date: datetime) -> bool:
-    path = get_met_dataset_path(base_dir, dataset_name, product_name, start_date, end_date)
+                              start_date: datetime, end_date: datetime, interval_hours: int = None) -> bool:
+    path = get_met_dataset_path(base_dir, dataset_name, product_name, start_date, end_date, interval_hours)
     return path.exists()
 
 @export
@@ -66,7 +73,7 @@ def download_met_dataset(base_dir: Union[str,Path], auth: tuple,
                          start_date: datetime, end_date: datetime,
                          lat_south: float, lat_north: float, lon_west: float, lon_east: float,
                          interval_hours: int = 3) -> Iterable[Tuple[float,str]]:
-    path = get_met_dataset_path(base_dir, dataset_name, product_name, start_date, end_date)
+    path = get_met_dataset_path(base_dir, dataset_name, product_name, start_date, end_date, interval_hours)
 
     if path.exists():
         remove_dir(path)

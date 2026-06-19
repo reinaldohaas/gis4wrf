@@ -642,44 +642,53 @@ class DatasetsWidget(QWidget):
                 dataset_item.setToolTip(0, 'Dataset: ' + long_name)
             dataset_item.setExpanded(True)
 
+            def add_time_range_item(parent_item, time_range_folder_path):
+                try:
+                    folder_meta, file_metas = read_grib_folder_metadata(time_range_folder_path)
+                    if not file_metas:
+                        return
+                except Exception:
+                    return
+
+                time_range = '{} - {}'.format(*map(lambda d: d.strftime('%Y-%m-%d %H:%M'), folder_meta.time_range))
+            
+                time_range_item = QTreeWidgetItem(parent_item)
+                time_range_item.setText(0, time_range)
+                time_range_item.setToolTip(0, time_range_folder_path)
+                time_range_item.setData(0, Qt.UserRole, time_range_folder_path)
+
+                for file_meta in file_metas:
+                    if file_meta.time_range[0] == file_meta.time_range[1]:
+                        time = file_meta.time_range[0].strftime('%Y-%m-%d %H:%M')
+                    else:
+                        time = '{} - {}'.format(*map(lambda d: d.strftime('%Y-%m-%d %H:%M'), file_meta.time_range))
+
+                    file_item = QTreeWidgetItem(time_range_item)
+                    file_item.setText(0, time)
+                    file_item.setToolTip(0, file_meta.path)
+                    file_item.setData(0, Qt.UserRole, file_meta.path)
+
             for product_name in os.listdir(dataset_path):
                 product_folder = os.path.join(dataset_path, product_name)
                 if not os.path.isdir(product_folder):
                     continue
 
-                product_item = QTreeWidgetItem(dataset_item)
-                product_item.setText(0, product_name)
-                product_item.setToolTip(0, 'Product: ' + product_name)
-                product_item.setExpanded(True)
+                has_grib = any(f.endswith('.grib') or f.endswith('.grb') for f in os.listdir(product_folder))
+                if has_grib:
+                    # Treat this level as time_range (2-level hierarchy like user's old era5 setup)
+                    add_time_range_item(dataset_item, product_folder)
+                else:
+                    # Treat this level as product (3-level hierarchy like ds084.1)
+                    product_item = QTreeWidgetItem(dataset_item)
+                    product_item.setText(0, product_name)
+                    product_item.setToolTip(0, 'Product: ' + product_name)
+                    product_item.setExpanded(True)
 
-                for time_range_name in os.listdir(product_folder):
-                    time_range_folder = os.path.join(product_folder, time_range_name)
-                    if not os.path.isdir(time_range_folder):
-                        continue
-
-                    folder_meta, file_metas = read_grib_folder_metadata(time_range_folder)
-                    if not file_metas:
-                        continue
-
-                    # TODO disable item and subitems if bbox does not fully cover the outer-most domain
-
-                    time_range = '{} - {}'.format(*map(lambda d: d.strftime('%Y-%m-%d %H:%M'), folder_meta.time_range))
-                
-                    time_range_item = QTreeWidgetItem(product_item)
-                    time_range_item.setText(0, time_range)
-                    time_range_item.setToolTip(0, time_range_folder)
-                    time_range_item.setData(0, Qt.UserRole, time_range_folder)
-
-                    for file_meta in file_metas:
-                        if file_meta.time_range[0] == file_meta.time_range[1]:
-                            time = file_meta.time_range[0].strftime('%Y-%m-%d %H:%M')
-                        else:
-                            time = '{} - {}'.format(*map(lambda d: d.strftime('%Y-%m-%d %H:%M'), file_meta.time_range))
-
-                        file_item = QTreeWidgetItem(time_range_item)
-                        file_item.setText(0, time)
-                        file_item.setToolTip(0, file_meta.path)
-                        file_item.setData(0, Qt.UserRole, file_meta.path)
+                    for time_range_name in os.listdir(product_folder):
+                        time_range_folder = os.path.join(product_folder, time_range_name)
+                        if not os.path.isdir(time_range_folder):
+                            continue
+                        add_time_range_item(product_item, time_range_folder)
 
 
     #endregion Meteorological Data

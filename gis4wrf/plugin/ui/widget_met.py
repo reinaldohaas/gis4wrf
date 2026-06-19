@@ -203,7 +203,9 @@ class MetToolsDownloadManager(QWidget):
         if dataset_name is None or product_name is None:
             raise UserError('Dataset/Product not selected')
 
-        args = [self.options.met_dir, dataset_name, product_name, start_date, end_date]
+        interval_hours = self.spin_interval.value()
+        
+        args = [self.options.met_dir, dataset_name, product_name, start_date, end_date, interval_hours]
         if is_met_dataset_downloaded(*args):
             reply = QMessageBox.question(self.iface.mainWindow(), 'Existing dataset',
                 ('You already downloaded data with the selected dataset/product/date/time combination. '
@@ -219,8 +221,6 @@ class MetToolsDownloadManager(QWidget):
         lon_east = self.right.value()
          # Use o token CDS para autenticação
         auth = (self.options.cds_key, '')
-
-        interval_hours = self.spin_interval.value()
 
         self.last_download_path = get_met_dataset_path(*args)
         self.last_dataset_name = dataset_name
@@ -245,6 +245,7 @@ class MetToolsDownloadManager(QWidget):
         self.status_label.show()
         self.btn_check_status.show()
         self.progress_bar.show()
+        self.current_req_ids = []
         
     def on_progress_download(self, progress: float, status: str) -> None:
         bar_value = int(progress * PROGRESS_BAR_MAX)
@@ -256,6 +257,14 @@ class MetToolsDownloadManager(QWidget):
         
         if status.startswith("[") and "] " in status:
             self.current_req_id = status.split("] ")[0][1:]
+            import re
+            match = re.search(r"Request ID: ([0-9a-fA-F-]+)", status)
+            if match:
+                req_id = match.group(1)
+                if not hasattr(self, 'current_req_ids'):
+                    self.current_req_ids = []
+                if req_id not in self.current_req_ids:
+                    self.current_req_ids.append(req_id)
 
         if status == 'submitted':
             self.msg_bar.info('Met dataset download request submitted successfully, waiting until available for download...')
@@ -263,31 +272,32 @@ class MetToolsDownloadManager(QWidget):
             self.msg_bar.info('Met dataset download request is now ready, downloading...')
         logger.debug(f'Met data download: {progress*100:.1f}% - {status}')
 
-    def on_check_status_clicked(self) -> None:
-        if not hasattr(self, 'current_req_id') or not self.current_req_id:
-            QMessageBox.information(self, "Status", "Nenhum Request ID encontrado no momento.")
+    def on_check_status_clicked(self):
+        if not hasattr(self, 'current_req_ids') or not self.current_req_ids:
+            QMessageBox.information(self, "Status", "Nenhum Request ID encontrado no processo atual.")
             return
             
         import requests
-        url = f"https://cds.climate.copernicus.eu/api/retrieve/v1/jobs/{self.current_req_id}"
-        headers = {
-            "Authorization": f"Bearer {self.options.cds_key}",
-            "PRIVATE-TOKEN": self.options.cds_key
-        }
-        try:
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code in (200, 202, 201):
-                data = resp.json()
-                msg = f"Request ID: {self.current_req_id}\n\n"
-                msg += f"Status: {data.get('status', 'Unknown')}\n"
-                msg += f"Created: {data.get('created', 'Unknown')}\n"
-                if data.get('status') == 'successful':
-                    msg += "\n\nO processo foi concluído no servidor do Copernicus!\nEle estará fazendo o download para o seu disco em breve."
-                QMessageBox.information(self, "Copernicus Status", msg)
-            else:
-                QMessageBox.warning(self, "Copernicus API", f"A API retornou status {resp.status_code}\n\nIsso pode ocorrer se a requisição ainda estiver na fila ou for antiga.\n\nDetalhes:\n{resp.text}")
-        except Exception as e:
-            QMessageBox.warning(self, "Erro de Conexão", str(e))
+        
+        status_messages = []
+        for req_id in self.current_req_ids:
+            url = f"https://cds.climate.copernicus.eu/api/retrieve/v1/jobs/{req_id}"
+            headers = {
+                "Authorization": f"Bearer {self.options.cds_key}"
+            }
+            try:
+                r = requests.get(url, headers=headers, timeout=10)
+                data = r.json()
+                if r.status_code == 200:
+                    status_text = data.get('status', 'unknown')
+                    created = data.get('created', 'unknown')
+                    status_messages.append(f"Request ID: {req_id}\nStatus: {status_text}\nCreated: {created}\n")
+                else:
+                    status_messages.append(f"Request ID: {req_id}\nError: {r.status_code} - {data.get('message', '')}\n")
+            except Exception as e:
+                status_messages.append(f"Request ID: {req_id}\nError checking status: {e}\n")
+                
+        QMessageBox.information(self, "Copernicus Status", "\n".join(status_messages) + "\nO processo concluiu a submissão, continue acompanhando para download.")
     
     def on_finished_download(self) -> None:
         self.btn_download.setEnabled(True)
