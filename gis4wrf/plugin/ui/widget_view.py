@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
 
 import gis4wrf.core
 from gis4wrf.core import WRFNetCDFVariable, WRFNetCDFVariableSource
-import gis4wrf.plugin.geo
+from gis4wrf.plugin import geo as plugin_geo
 from gis4wrf.plugin.ui.helpers import add_grid_lineedit, add_grid_combobox, dispose_after_delete
 
 Dataset = namedtuple('Dataset', [
@@ -235,7 +235,7 @@ class ViewWidget(QWidget):
         self.selected_dataset = self.get_dataset_name()
 
         if previous_dataset is not None:
-            gis4wrf.plugin.geo.remove_group(previous_dataset)
+            plugin_geo.remove_group(previous_dataset)
 
         if previous_dataset == self.selected_dataset:
             # User re-opened same file, e.g. to see new time steps while running simulation.
@@ -295,18 +295,18 @@ class ViewWidget(QWidget):
         label = self.get_variable_label(variable)
         uri, dispose = gis4wrf.core.convert_wrf_nc_var_to_gdal_dataset(
             dataset.path, variable.name, extra_dim_index, interp_level, interp_vert_name)
-        layer = gis4wrf.plugin.geo.load_layers([(uri, label, variable.name)],
+        layer = plugin_geo.load_layers([(uri, label, variable.name)],
             group_name=dataset.name, visible=True)[0]
         dispose_after_delete(layer, dispose)
 
     def select_time_band_in_variable_layers(self) -> None:
         dataset = self.get_dataset()
         time_idx = self.get_time_index()
-        layers = gis4wrf.plugin.geo.get_raster_layers_in_group(dataset.name)
+        layers = plugin_geo.get_raster_layers_in_group(dataset.name)
         for layer in layers:
             var_name = layer.shortName()
             if var_name in dataset.variables:
-                gis4wrf.plugin.geo.switch_band(layer, time_idx)
+                plugin_geo.switch_band(layer, time_idx)
     
     def get_variable_label(self, variable: WRFNetCDFVariable) -> str:
         label = variable.name.upper()
