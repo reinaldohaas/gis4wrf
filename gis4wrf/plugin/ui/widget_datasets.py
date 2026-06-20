@@ -72,8 +72,9 @@ class DatasetsWidget(QWidget):
         self.populate_met_data_tree()
 
     def on_tab_active(self):
+        if not self.project:
+            return
         self.update_geo_datasets_spec_fields()
-        self.set_met_data_current_config_label()
 
     #region Geographical Data
 
@@ -486,27 +487,6 @@ class DatasetsWidget(QWidget):
         vbox_datasets_spec.addWidget(custom_button)
 
         
-    def set_met_data_current_config_label(self) -> None:
-        try:
-            spec = self.project.met_dataset_spec
-        except (KeyError, AttributeError):
-            config = None
-        else:
-            time_range = [d.strftime('%Y-%m-%d %H:%M') for d in spec['time_range']]
-            dataset = spec['dataset']
-            product = spec['product']
-            if dataset:
-                config = '{} / {}\n{} -\n{}'.format(spec['dataset'], spec['product'], *time_range)
-            else:
-                config = 'Custom dataset / {} GRIB files\n{} -\n{}'.format(len(spec['paths']), *time_range)
-
-        lbl = self.met_data_current_config_label
-        if not config:
-            lbl.setText('Undefined')
-            lbl.setStyleSheet(self.undef_label_style)
-        else:
-            lbl.setText(config)
-            lbl.setStyleSheet('')
 
     def on_met_data_selection_button_clicked(self) -> None:
         msg_bar = self.iface.messageBar() # type: QgsMessageBar
@@ -550,7 +530,6 @@ class DatasetsWidget(QWidget):
             'time_range': meta_all.time_range,
             'interval_seconds': meta_all.interval_seconds
         }
-        self.set_met_data_current_config_label()
 
     def on_met_data_custom_button_clicked(self) -> None:
         try:
@@ -580,7 +559,6 @@ class DatasetsWidget(QWidget):
             'time_range': [dialog.start_date, dialog.end_date],
             'interval_seconds': dialog.interval_seconds
         }
-        self.set_met_data_current_config_label()
 
     def _build_spec_from_tree_selection(self) -> Optional[dict]:
         """Build a pre-population spec from the currently selected item in the met data tree."""
