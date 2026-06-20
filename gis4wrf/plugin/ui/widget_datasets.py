@@ -6,6 +6,7 @@ import os
 import platform
 from pathlib import Path
 import re
+from typing import Optional
 
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, pyqtSlot
 from PyQt5.QtWidgets import (
@@ -565,11 +566,14 @@ class DatasetsWidget(QWidget):
     def on_met_data_custom_button_clicked(self) -> None:
         try:
             spec = self.project.met_dataset_spec
-            if spec['dataset']:
-                spec = None # not a custom dataset
-        except KeyError:
-            # met data not configured yet
+            if spec.get('dataset'):
+                spec = None  # not a custom dataset, clear it
+        except (KeyError, AttributeError):
             spec = None
+
+        # If no custom spec, try to pre-populate from the currently selected tree item
+        if spec is None:
+            spec = self._build_spec_from_tree_selection()
 
         dialog = CustomMetDatasetDialog(self.options.ungrib_vtable_dir, spec)
         if not dialog.exec_():
@@ -588,6 +592,42 @@ class DatasetsWidget(QWidget):
             'interval_seconds': dialog.interval_seconds
         }
         self.set_met_data_current_config_label()
+
+    def _build_spec_from_tree_selection(self) -> Optional[dict]:
+        """Build a pre-population spec from the currently selected item in the met data tree."""
+        try:
+            item = self.tree_met_data.currentItem()
+            if item is None:
+                return None
+            folder_path = item.data(0, Qt.UserRole)
+            if not folder_path or not os.path.isdir(folder_path):
+                return None
+
+            folder_meta, file_metas = read_grib_folder_metadata(folder_path)
+            if not file_metas:
+                return None
+
+            paths = [meta.path for meta in file_metas]
+            start_date, end_date = folder_meta.time_range
+
+            # Try to find a default VTable (ERA-interim is the recommended one for ERA5)
+            default_vtable = ''
+            vtable_dir = self.options.ungrib_vtable_dir
+            for candidate in ['Vtable.ERA-interim.pl', 'Vtable.ERA-interim', 'Vtable.GFS']:
+                if os.path.exists(os.path.join(vtable_dir, candidate)):
+                    default_vtable = candidate
+                    break
+
+            return {
+                'paths': paths,
+                'base_folder': folder_path,
+                'vtable': default_vtable,
+                'time_range': [start_date, end_date],
+                'interval_seconds': folder_meta.interval_seconds
+            }
+        except Exception:
+            return None
+
 
     def on_tree_met_data_open_context_menu(self, position) -> None:
         item = self.tree_met_data.currentItem()
