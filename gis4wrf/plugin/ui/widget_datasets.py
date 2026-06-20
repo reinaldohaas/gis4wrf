@@ -7,7 +7,7 @@ import platform
 from pathlib import Path
 import re
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, pyqtSlot
 from PyQt5.QtWidgets import (
     QWidget, QTabWidget, QPushButton, QLayout, QVBoxLayout, QDialog, QGridLayout, QGroupBox, QSpinBox,
     QLabel, QHBoxLayout, QComboBox, QScrollArea, QFileDialog, QRadioButton, QLineEdit, QTableWidget,
@@ -622,75 +622,56 @@ class DatasetsWidget(QWidget):
         tree.clear()
 
         root_dir = self.options.met_dir
-        # TODO is this the right place to check?
         if not os.path.exists(root_dir):
             return
-        for dataset_name in os.listdir(root_dir):
-            dataset_path = os.path.join(root_dir, dataset_name)
-            if not os.path.isdir(dataset_path):
-                continue
 
-            long_name = met_datasets.get(dataset_name)
-            if long_name:
-                label = '{}: {}'.format(dataset_name, long_name)
-            else:
-                label = dataset_name
+        # Show a loading placeholder immediately
+        loading_item = QTreeWidgetItem(tree)
+        loading_item.setText(0, '⏳ Carregando datasets...')
 
+        # Stop any previously running worker
+        if hasattr(self, '_met_tree_worker') and self._met_tree_worker is not None:
+            self._met_tree_worker.quit()
+            self._met_tree_worker.wait()
+
+        worker = _MetTreeWorker(root_dir)
+        worker.finished.connect(self._on_met_tree_loaded)
+        self._met_tree_worker = worker
+        worker.start()
+
+    @pyqtSlot(list)
+    def _on_met_tree_loaded(self, tree_data: list) -> None:
+        tree = self.tree_met_data
+        tree.clear()
+
+        for dataset in tree_data:
             dataset_item = QTreeWidgetItem(tree)
-            dataset_item.setText(0, label)
-            if long_name:
-                dataset_item.setToolTip(0, 'Dataset: ' + long_name)
+            dataset_item.setText(0, dataset['label'])
+            if dataset.get('tooltip'):
+                dataset_item.setToolTip(0, dataset['tooltip'])
             dataset_item.setExpanded(True)
 
-            def add_time_range_item(parent_item, time_range_folder_path):
-                try:
-                    folder_meta, file_metas = read_grib_folder_metadata(time_range_folder_path)
-                    if not file_metas:
-                        return
-                except Exception:
-                    return
-
-                time_range = '{} - {}'.format(*map(lambda d: d.strftime('%Y-%m-%d %H:%M'), folder_meta.time_range))
-                folder_name = os.path.basename(time_range_folder_path)
-                display_text = f"{time_range}  [{folder_name}]"
-            
-                time_range_item = QTreeWidgetItem(parent_item)
-                time_range_item.setText(0, display_text)
-                time_range_item.setToolTip(0, time_range_folder_path)
-                time_range_item.setData(0, Qt.UserRole, time_range_folder_path)
-
-                for file_meta in file_metas:
-                    if file_meta.time_range[0] == file_meta.time_range[1]:
-                        time = file_meta.time_range[0].strftime('%Y-%m-%d %H:%M')
-                    else:
-                        time = '{} - {}'.format(*map(lambda d: d.strftime('%Y-%m-%d %H:%M'), file_meta.time_range))
-
-                    file_item = QTreeWidgetItem(time_range_item)
-                    file_item.setText(0, time)
-                    file_item.setToolTip(0, file_meta.path)
-                    file_item.setData(0, Qt.UserRole, file_meta.path)
-
-            for product_name in os.listdir(dataset_path):
-                product_folder = os.path.join(dataset_path, product_name)
-                if not os.path.isdir(product_folder):
-                    continue
-
-                has_grib = any(f.lower().endswith(ext) for f in os.listdir(product_folder) for ext in ['.grib', '.grb', '.grib1', '.grib2'])
-                if has_grib:
-                    # Treat this level as time_range (2-level hierarchy like user's old era5 setup)
-                    add_time_range_item(dataset_item, product_folder)
-                else:
-                    # Treat this level as product (3-level hierarchy like ds084.1)
+            for child in dataset['children']:
+                if child['type'] == 'product':
                     product_item = QTreeWidgetItem(dataset_item)
-                    product_item.setText(0, product_name)
-                    product_item.setToolTip(0, 'Product: ' + product_name)
+                    product_item.setText(0, child['name'])
+                    product_item.setToolTip(0, 'Product: ' + child['name'])
                     product_item.setExpanded(True)
+                    for tr in child['time_ranges']:
+                        self._add_time_range_item_from_data(product_item, tr)
+                elif child['type'] == 'time_range':
+                    self._add_time_range_item_from_data(dataset_item, child)
 
-                    for time_range_name in os.listdir(product_folder):
-                        time_range_folder = os.path.join(product_folder, time_range_name)
-                        if not os.path.isdir(time_range_folder):
-                            continue
-                        add_time_range_item(product_item, time_range_folder)
+    def _add_time_range_item_from_data(self, parent_item, tr: dict) -> None:
+        time_range_item = QTreeWidgetItem(parent_item)
+        time_range_item.setText(0, tr['display_text'])
+        time_range_item.setToolTip(0, tr['folder_path'])
+        time_range_item.setData(0, Qt.UserRole, tr['folder_path'])
+        for fm in tr.get('file_metas', []):
+            file_item = QTreeWidgetItem(time_range_item)
+            file_item.setText(0, fm['time'])
+            file_item.setToolTip(0, fm['path'])
+            file_item.setData(0, Qt.UserRole, fm['path'])
 
 
     #endregion Meteorological Data
@@ -701,4 +682,90 @@ class DatasetsWidget(QWidget):
             color: #ff0000;
         }
     """)
+
+
+class _MetTreeWorker(QThread):
+    """Reads GRIB folder metadata in a background thread and returns serializable data."""
+    finished = pyqtSignal(list)
+
+    def __init__(self, root_dir: str):
+        super().__init__()
+        self.root_dir = root_dir
+
+    def run(self):
+        from gis4wrf.core import met_datasets
+        from gis4wrf.core import read_grib_folder_metadata
+        tree_data = []
+
+        for dataset_name in sorted(os.listdir(self.root_dir)):
+            dataset_path = os.path.join(self.root_dir, dataset_name)
+            if not os.path.isdir(dataset_path):
+                continue
+
+            long_name = met_datasets.get(dataset_name)
+            label = '{}: {}'.format(dataset_name, long_name) if long_name else dataset_name
+            tooltip = 'Dataset: ' + long_name if long_name else None
+
+            children = []
+            for product_name in sorted(os.listdir(dataset_path)):
+                product_folder = os.path.join(dataset_path, product_name)
+                if not os.path.isdir(product_folder):
+                    continue
+
+                has_grib = any(
+                    f.lower().endswith(ext)
+                    for f in os.listdir(product_folder)
+                    for ext in ['.grib', '.grb', '.grib1', '.grib2']
+                )
+
+                if has_grib:
+                    tr = self._build_time_range(product_folder, read_grib_folder_metadata)
+                    if tr:
+                        tr['type'] = 'time_range'
+                        children.append(tr)
+                else:
+                    time_ranges = []
+                    for time_range_name in sorted(os.listdir(product_folder)):
+                        time_range_folder = os.path.join(product_folder, time_range_name)
+                        if not os.path.isdir(time_range_folder):
+                            continue
+                        tr = self._build_time_range(time_range_folder, read_grib_folder_metadata)
+                        if tr:
+                            time_ranges.append(tr)
+                    if time_ranges:
+                        children.append({'type': 'product', 'name': product_name, 'time_ranges': time_ranges})
+
+            if children:
+                tree_data.append({'label': label, 'tooltip': tooltip, 'children': children})
+
+        self.finished.emit(tree_data)
+
+    def _build_time_range(self, folder_path: str, read_fn) -> dict:
+        try:
+            folder_meta, file_metas = read_fn(folder_path)
+            if not file_metas:
+                return None
+        except Exception:
+            return None
+
+        time_range = '{} - {}'.format(
+            *map(lambda d: d.strftime('%Y-%m-%d %H:%M'), folder_meta.time_range)
+        )
+        folder_name = os.path.basename(folder_path)
+        display_text = f"{time_range}  [{folder_name}]"
+
+        file_meta_data = []
+        for fm in file_metas:
+            if fm.time_range[0] == fm.time_range[1]:
+                t = fm.time_range[0].strftime('%Y-%m-%d %H:%M')
+            else:
+                t = '{} - {}'.format(*map(lambda d: d.strftime('%Y-%m-%d %H:%M'), fm.time_range))
+            file_meta_data.append({'time': t, 'path': fm.path})
+
+        return {
+            'folder_path': folder_path,
+            'display_text': display_text,
+            'file_metas': file_meta_data
+        }
+
 

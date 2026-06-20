@@ -3,9 +3,14 @@
 
 from typing import Set, Dict, Tuple, List, Optional
 import os
+import json
+import hashlib
 from datetime import datetime, timedelta
 
 from gis4wrf.core.util import gdal, export
+
+# Cache directory next to this file
+_CACHE_DIR = os.path.join(os.path.dirname(__file__), '__grib_cache__')
 
 class GribMetadata(object):
     def __init__(self, variables: Dict[str,str], times: List[datetime], path: Optional[str]=None) -> None:
@@ -27,6 +32,43 @@ class GribMetadata(object):
 def is_grib_file(path: str) -> bool:
     with open(path, 'rb') as f:
         return f.read(4) == b'GRIB'
+
+def _file_fingerprint(path: str) -> str:
+    """Fast fingerprint: path + size + mtime. No need to hash content."""
+    stat = os.stat(path)
+    key = f"{path}|{stat.st_size}|{stat.st_mtime}"
+    return hashlib.md5(key.encode()).hexdigest()
+
+def _cache_path(fingerprint: str) -> str:
+    os.makedirs(_CACHE_DIR, exist_ok=True)
+    return os.path.join(_CACHE_DIR, fingerprint + '.json')
+
+def _load_from_cache(fingerprint: str) -> Optional['GribMetadata']:
+    cp = _cache_path(fingerprint)
+    if not os.path.exists(cp):
+        return None
+    try:
+        with open(cp, 'r') as f:
+            data = json.load(f)
+        variables = data['variables']
+        times = [datetime(1970, 1, 1) + timedelta(seconds=s) for s in data['unix_times']]
+        path = data.get('path')
+        return GribMetadata(variables, sorted(times), path)
+    except Exception:
+        return None
+
+def _save_to_cache(fingerprint: str, meta: 'GribMetadata') -> None:
+    cp = _cache_path(fingerprint)
+    try:
+        data = {
+            'variables': meta.variables,
+            'unix_times': [int((t - datetime(1970, 1, 1)).total_seconds()) for t in meta.times],
+            'path': meta.path
+        }
+        with open(cp, 'w') as f:
+            json.dump(data, f)
+    except Exception:
+        pass  # Cache write failure is non-fatal
 
 @export
 def read_grib_folder_metadata(folder: str) -> Tuple[GribMetadata, List[GribMetadata]]:
@@ -61,6 +103,12 @@ def read_grib_files_metadata(paths: List[str]) -> Tuple[GribMetadata, List[GribM
 
 @export
 def read_grib_file_metadata(path: str) -> GribMetadata:
+    # Try cache first
+    fingerprint = _file_fingerprint(path)
+    cached = _load_from_cache(fingerprint)
+    if cached is not None:
+        return cached
+
     ds = gdal.Open(path, gdal.GA_ReadOnly)
 
     # ds.GetMetadata() returns nothing in gdal < 2.3, but with 2.3 it contains the GRIB_IDS
@@ -86,4 +134,7 @@ def read_grib_file_metadata(path: str) -> GribMetadata:
         time = datetime(1970, 1, 1) + timedelta(seconds=unix)
         times.add(time)
 
-    return GribMetadata(variables, sorted(times), path)
+    result = GribMetadata(variables, sorted(times), path)
+    # Save to cache for next time
+    _save_to_cache(fingerprint, result)
+    return result
