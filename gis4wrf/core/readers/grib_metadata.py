@@ -3,7 +3,7 @@
 
 from typing import Set, Dict, Tuple, List, Optional
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from gis4wrf.core.util import gdal, export
 
@@ -82,8 +82,8 @@ def read_grib_file_metadata(path: str) -> GribMetadata:
         var_label_without_unit = var_label.replace(var_unit, '').strip()
         variables[var_name] = var_label_without_unit
         
-        unix = int(''.join(c for c in valid_time if c.isdigit()))
-        time = datetime.utcfromtimestamp(unix)
+        unix = int(''.join(c for c in valid_time if c.isdigit() or c == '-'))
+        time = datetime(1970, 1, 1) + timedelta(seconds=unix)
         times.add(time)
 
     return GribMetadata(variables, sorted(times), path)
