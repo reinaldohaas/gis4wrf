@@ -85,7 +85,7 @@ class MetToolsDownloadManager(QWidget):
         vbox.addLayout(hbox_interval)
         self.spin_interval = QSpinBox()
         self.spin_interval.setRange(1, 24)
-        self.spin_interval.setValue(3)
+        self.spin_interval.setValue(1)
         hbox_interval.addWidget(QLabel('Interval (hours): '))
         hbox_interval.addWidget(self.spin_interval)
 
@@ -119,7 +119,7 @@ class MetToolsDownloadManager(QWidget):
         self.extent_from_active_layer = QPushButton('Set from Active Layer')
         grid_extent.addWidget(self.extent_from_active_layer, 4, 1)
         self.extent_from_active_layer.clicked.connect(self.on_extent_from_active_layer_button_clicked)
-        self.radio_global.setChecked(True)
+        self.radio_subset.setChecked(True)
 
         self.tree = QListWidget()
         vbox_tree = QVBoxLayout()

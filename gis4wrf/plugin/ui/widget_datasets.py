@@ -481,21 +481,10 @@ class DatasetsWidget(QWidget):
         vbox_datasets_spec = QVBoxLayout()
         gbox_datasets_spec.setLayout(vbox_datasets_spec)
 
-        selection_button = QPushButton('Use Dataset Selection from List')
-        selection_button.clicked.connect(self.on_met_data_selection_button_clicked)
-        vbox_datasets_spec.addWidget(selection_button)
-
         custom_button = QPushButton('Use Custom Dataset')
         custom_button.clicked.connect(self.on_met_data_custom_button_clicked)
         vbox_datasets_spec.addWidget(custom_button)
 
-        hbox_current_config = QHBoxLayout()
-        vbox_datasets_spec.addLayout(hbox_current_config)
-        hbox_current_config.addWidget(QLabel('Current Configuration: '))
-        self.met_data_current_config_label = QLabel()
-        hbox_current_config.addWidget(self.met_data_current_config_label)
-        self.set_met_data_current_config_label()
-        hbox_current_config.insertStretch(-1)
         
     def set_met_data_current_config_label(self) -> None:
         try:
@@ -610,13 +599,10 @@ class DatasetsWidget(QWidget):
             paths = [meta.path for meta in file_metas]
             start_date, end_date = folder_meta.time_range
 
-            # Try to find a default VTable (ERA-interim is the recommended one for ERA5)
-            default_vtable = ''
+            # Smart VTable detection based on folder path
+            from gis4wrf.plugin.ui.dialog_custom_met_dataset import guess_vtable
             vtable_dir = self.options.ungrib_vtable_dir
-            for candidate in ['Vtable.ERA-interim.pl', 'Vtable.ERA-interim', 'Vtable.GFS']:
-                if os.path.exists(os.path.join(vtable_dir, candidate)):
-                    default_vtable = candidate
-                    break
+            default_vtable = guess_vtable(folder_path, vtable_dir)
 
             return {
                 'paths': paths,
@@ -627,6 +613,7 @@ class DatasetsWidget(QWidget):
             }
         except Exception:
             return None
+
 
 
     def on_tree_met_data_open_context_menu(self, position) -> None:
