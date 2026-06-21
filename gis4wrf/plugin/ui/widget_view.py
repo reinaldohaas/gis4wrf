@@ -79,14 +79,20 @@ class ViewWidget(QWidget):
 
     def create_extra_dim_selector(self) -> None:
         self.extra_dim_label = QLabel('N/A:')
-        self.extra_dim_selector = QComboBox()
-        self.extra_dim_selector.currentIndexChanged.connect(self.on_extra_dim_selected)
-        hbox = QHBoxLayout()
-        hbox.addWidget(self.extra_dim_label)
-        hbox.addWidget(self.extra_dim_selector)
-        hbox.setContentsMargins(0, 0, 0, 0)
+        self.extra_dim_selector = QSlider(Qt.Horizontal)
+        self.extra_dim_selector.setSingleStep(1)
+        self.extra_dim_selector.setPageStep(1)
+        self.extra_dim_selector.setMinimum(0)
+        self.extra_dim_selector.setMaximum(0)
+        self.extra_dim_selector.valueChanged.connect(self.on_extra_dim_selected)
+        
+        vbox = QVBoxLayout()
+        vbox.addWidget(self.extra_dim_label)
+        vbox.addWidget(self.extra_dim_selector)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        
         self.extra_dim_container = QWidget()
-        self.extra_dim_container.setLayout(hbox)
+        self.extra_dim_container.setLayout(vbox)
         self.extra_dim_container.setHidden(True)
         self.vbox.addWidget(self.extra_dim_container)
 
@@ -233,24 +239,16 @@ class ViewWidget(QWidget):
         except Exception:
             return
         layers = plugin_geo.get_raster_layers_in_group(dataset.name)
-        from qgis.core import QgsRasterLayer
+        from qgis.core import QgsBilinearRasterResampler
         for layer in layers:
-            try:
+            resampler_filter = layer.resampleFilter()
+            if resampler_filter:
                 if checked:
-                    layer.setZoomedInResamplingMethod(QgsRasterLayer.ResamplingBilinear)
-                    layer.setZoomedOutResamplingMethod(QgsRasterLayer.ResamplingBilinear)
+                    resampler_filter.setZoomedInResampler(QgsBilinearRasterResampler())
+                    resampler_filter.setZoomedOutResampler(QgsBilinearRasterResampler())
                 else:
-                    layer.setZoomedInResamplingMethod(QgsRasterLayer.ResamplingNearestNeighbour)
-                    layer.setZoomedOutResamplingMethod(QgsRasterLayer.ResamplingNearestNeighbour)
-            except AttributeError:
-                try:
-                    from qgis.core import Qgis
-                    method = (Qgis.RasterResamplingMethod.Bilinear if checked
-                              else Qgis.RasterResamplingMethod.Nearest)
-                    layer.setZoomedInResamplingMethod(method)
-                    layer.setZoomedOutResamplingMethod(method)
-                except Exception:
-                    pass
+                    resampler_filter.setZoomedInResampler(None)
+                    resampler_filter.setZoomedOutResampler(None)
             layer.triggerRepaint()
 
     def on_add_contours(self) -> None:
@@ -288,7 +286,7 @@ class ViewWidget(QWidget):
                                            geom_type=ogr.wkbMultiLineString)
             field = ogr.FieldDefn('LEVEL', ogr.OFTReal)
             out_layer.CreateField(field)
-            gdal.ContourGenerate(band, interval, 0, [], 0, 0, out_layer, 0, 1)
+            gdal.ContourGenerate(band, interval, 0, [], 0, 0, out_layer, -1, 0)
             out_ds = None
 
             from qgis.core import QgsVectorLayer, QgsProject
@@ -470,11 +468,10 @@ class ViewWidget(QWidget):
         self.pause_replace_layer = True
         extra_dim = dataset.extra_dims[extra_dim_name]
         selected_extra_dim = self.selected_extra_dim.get((dataset.name, extra_dim_name), 0)
-        self.extra_dim_label.setText(extra_dim.label + ':')
-        self.extra_dim_selector.clear()
-        for step in extra_dim.steps:
-            self.extra_dim_selector.addItem(step)
-        self.extra_dim_selector.setCurrentIndex(selected_extra_dim)
+        self.extra_dim_label.setText(extra_dim.label + f': {extra_dim.steps[selected_extra_dim]}')
+        self.extra_dim_selector.setMinimum(0)
+        self.extra_dim_selector.setMaximum(len(extra_dim.steps) - 1)
+        self.extra_dim_selector.setValue(selected_extra_dim)
         self.extra_dim_container.show()
         self.pause_replace_layer = False
 
@@ -553,12 +550,14 @@ class ViewWidget(QWidget):
         self.select_time_band_in_variable_layers()
 
     def on_extra_dim_selected(self, index: int) -> None:
-        if index == -1:
-            # happens when clearing the dropdown entries
-            return
+        dataset = self.get_dataset()
         variable = self.get_variable()
         extra_dim_name = variable.extra_dim_name
-        self.selected_extra_dim[(self.get_dataset_name(), extra_dim_name)] = index
+        self.selected_extra_dim[(dataset.name, extra_dim_name)] = index
+        
+        extra_dim = dataset.extra_dims[extra_dim_name]
+        self.extra_dim_label.setText(extra_dim.label + f': {extra_dim.steps[index]}')
+
         self.replace_variable_layer()
         self.select_time_band_in_variable_layers()
 
@@ -617,11 +616,9 @@ class ViewWidget(QWidget):
         return self.time_selector.value()
 
     def get_extra_dim_index(self) -> Optional[int]:
-        if self.get_variable().extra_dim_name is None:
+        if self.extra_dim_container.isHidden():
             return None
-        index = self.extra_dim_selector.currentIndex()
-        assert index != -1
-        return index
+        return self.extra_dim_selector.value()
 
     def is_interp_enabled(self):
         return self.interp_container.isVisible() and self.interp_container.isChecked()

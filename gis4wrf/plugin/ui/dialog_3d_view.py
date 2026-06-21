@@ -152,6 +152,15 @@ class View3DDialog(QDialog):
             if hgt is not None:
                 self.terrain = np.squeeze(np.array(hgt[0]))
 
+            landmask = ds.variables.get('LANDMASK')
+            if landmask is not None:
+                self.landmask = np.squeeze(np.array(landmask[0]))
+            else:
+                self.landmask = None
+
+            if not hasattr(self, 'all_vars'):
+                self.all_vars = [name for name, val in ds.variables.items() if hasattr(val, 'ndim') and val.ndim >= 3]
+
             v = ds.variables.get(self.var_name)
             if v is None:
                 raise KeyError(f'"{self.var_name}" not found')
@@ -241,6 +250,12 @@ class View3DDialog(QDialog):
         self._chk_terrain.toggled.connect(self._on_terrain_toggle)
         mode_lay.addWidget(self._chk_terrain)
 
+        self._chk_coast = QCheckBox('🗺 Coastlines')
+        self._chk_coast.setChecked(False)
+        self._chk_coast.setEnabled(getattr(self, 'landmask', None) is not None)
+        self._chk_coast.toggled.connect(self._on_coast_toggle)
+        mode_lay.addWidget(self._chk_coast)
+
         self._chk_wind = QCheckBox('💨 Wind vectors')
         self._chk_wind.setChecked(False)
         self._chk_wind.setEnabled(self._has_wind)
@@ -309,20 +324,26 @@ class View3DDialog(QDialog):
 
         # ── Appearance ────────────────────────────────────────────────────────
         app_box = QGroupBox('Appearance')
-        app_lay = QVBoxLayout(app_box)
+        app_lay = QGridLayout(app_box)
 
-        app_lay.addWidget(QLabel('Colormap:'))
+        app_lay.addWidget(QLabel('Variable:'), 0, 0)
+        self._var_combo = QComboBox()
+        if hasattr(self, 'all_vars'):
+            self._var_combo.addItems(self.all_vars)
+            self._var_combo.setCurrentText(self.var_name)
+        self._var_combo.currentTextChanged.connect(self._on_var_changed)
+        app_lay.addWidget(self._var_combo, 0, 1, 1, 2)
+
+        app_lay.addWidget(QLabel('Colormap:'), 1, 0)
         self._cmap_combo = QComboBox()
         for n in RAMP_CHOICES:
             self._cmap_combo.addItem(n)
         cin = self.cmap_name if self.cmap_name in RAMP_CHOICES else 'Spectral_r'
         self._cmap_combo.setCurrentText(cin)
         self._cmap_combo.currentTextChanged.connect(self._on_cmap)
-        app_lay.addWidget(self._cmap_combo)
+        app_lay.addWidget(self._cmap_combo, 1, 1, 1, 2)
 
-        # Alpha slider
-        a_row = QHBoxLayout()
-        a_row.addWidget(QLabel('Transparency:'))
+        app_lay.addWidget(QLabel('Transparency:'), 2, 0)
         self._alpha_slider = QSlider(Qt.Horizontal)
         self._alpha_slider.setRange(5, 100)
         self._alpha_slider.setValue(int(self._alpha * 100))
@@ -330,13 +351,10 @@ class View3DDialog(QDialog):
         self._alpha_slider.setTickInterval(10)
         self._alpha_label = QLabel(f'{int(self._alpha*100)} %')
         self._alpha_slider.valueChanged.connect(self._on_alpha)
-        a_row.addWidget(self._alpha_slider)
-        a_row.addWidget(self._alpha_label)
-        app_lay.addLayout(a_row)
+        app_lay.addWidget(self._alpha_slider, 2, 1)
+        app_lay.addWidget(self._alpha_label, 2, 2)
 
-        # Vert exag slider
-        v_row = QHBoxLayout()
-        v_row.addWidget(QLabel('Vert. exag ×:'))
+        app_lay.addWidget(QLabel('Vert. exag ×:'), 3, 0)
         self._vexag_slider = QSlider(Qt.Horizontal)
         self._vexag_slider.setRange(1, 500)
         self._vexag_slider.setValue(self._vert_exag)
@@ -344,13 +362,16 @@ class View3DDialog(QDialog):
         self._vexag_slider.setTickInterval(50)
         self._vexag_label = QLabel(f'× {self._vert_exag}')
         self._vexag_slider.valueChanged.connect(self._on_vexag)
-        v_row.addWidget(self._vexag_slider)
-        v_row.addWidget(self._vexag_label)
-        app_lay.addLayout(v_row)
+        app_lay.addWidget(self._vexag_slider, 3, 1)
+        app_lay.addWidget(self._vexag_label, 3, 2)
+
+        self.chk_autorotate = QCheckBox('Auto Rotate')
+        self.chk_autorotate.toggled.connect(self._on_autorotate_toggled)
+        app_lay.addWidget(self.chk_autorotate, 4, 0, 1, 3)
 
         save_btn = QPushButton('💾 Save PNG')
         save_btn.clicked.connect(self._export_png)
-        app_lay.addWidget(save_btn)
+        app_lay.addWidget(save_btn, 5, 0, 1, 3)
         row.addWidget(app_box)
 
         row.addStretch()
@@ -398,6 +419,10 @@ class View3DDialog(QDialog):
             f'{self.var_name}  [{self.var_units}]  —  {t_str} {title_extra}',
             color='white', fontsize=10, pad=8
         )
+        try:
+            ax.set_box_aspect((1, 1, 0.4))
+        except Exception:
+            pass
         return ax
 
     def _make_ax2d(self):
@@ -449,6 +474,14 @@ class View3DDialog(QDialog):
 
         if self._show_wind and self._has_wind:
             self._add_wind_quiver(ax, terr_s * self._vert_exag, lons_s, lats_s)
+
+        if hasattr(self, '_chk_coast') and self._chk_coast.isChecked() and getattr(self, 'landmask', None) is not None:
+            try:
+                mask_s = self._sub(self.landmask[:ny, :nx])[0]
+                z_offset = np.min(terr_s * self._vert_exag)
+                ax.contour(lons_s, lats_s, mask_s, levels=[0.5], colors='white', linewidths=1.0, zdir='z', offset=z_offset)
+            except Exception:
+                pass
 
         self._add_colorbar(ax, cmap, norm, vmin, vmax)
 
@@ -588,13 +621,17 @@ class View3DDialog(QDialog):
         cf = ax.contourf(lons, lats, data_clean, levels=20,
                          cmap=cmap, norm=norm, alpha=self._alpha,
                          extend='both')
-        # Contour lines
         cs = ax.contour(lons, lats, data_clean, levels=10,
                         colors='white', linewidths=0.4, alpha=0.6)
         ax.clabel(cs, inline=True, fontsize=6, fmt='%.1f',
                   colors='white', use_clabeltext=True)
 
-        # Wind vectors on 2D
+        if hasattr(self, '_chk_coast') and self._chk_coast.isChecked() and getattr(self, 'landmask', None) is not None:
+            try:
+                ax.contour(lons, lats, self.landmask[:ny, :nx], levels=[0.5], colors='black', linewidths=1.0)
+            except Exception:
+                pass
+
         if self._show_wind and self._has_wind:
             step = max(1, min(ny, nx) // 15)
             lo_s, la_s = lons[::step, ::step], lats[::step, ::step]
@@ -608,7 +645,9 @@ class View3DDialog(QDialog):
         ax.set_xlabel('Longitude' if self.lons is not None else 'X')
         ax.set_ylabel('Latitude'  if self.lats is not None else 'Y')
 
-        cb = self.fig.colorbar(cf, ax=ax, pad=0.02, fraction=0.04)
+        # Dummy ScalarMappable for colorbar
+        sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+        cb = self.fig.colorbar(sm, ax=ax, pad=0.02, fraction=0.04)
         cb.set_label(f'{self.var_name} [{self.var_units}]', color='#ccc', fontsize=8)
         for lbl in cb.ax.get_yticklabels():
             lbl.set_color('#aaa')
