@@ -11,11 +11,13 @@ from qgis.core import (
     QgsRasterLayer, QgsLayerTreeLayer, QgsSingleSymbolRenderer, QgsFillSymbol,
     QgsPalettedRasterRenderer, QgsMapSettings, QgsRectangle, QgsRasterDataProvider, QgsRaster,
     QgsSingleBandGrayRenderer, QgsRasterRenderer, QgsContrastEnhancement, QgsRasterMinMaxOrigin,
-    QgsSingleBandPseudoColorRenderer
+    QgsSingleBandPseudoColorRenderer, QgsRasterBandStats, QgsColorRampShader,
+    QgsRasterShader, QgsStyle, QgsGradientColorRamp, QgsGradientStop
 )
 from qgis.gui import QgsMapCanvas
 
 from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtGui import QColor
 
 import gis4wrf.core
 from gis4wrf.core import BoundingBox2D
@@ -141,27 +143,135 @@ def load_layers(uris_and_names: List[Tuple[str,str,Optional[str]]], group_name=N
 
     return layers
 
+# ---------------------------------------------------------------------------
+# Smart colormap helpers
+# ---------------------------------------------------------------------------
+
+# Maps WRF variable name patterns → (QGIS ramp name, invert)
+_VAR_COLORMAPS = [
+    (['T2', 'TK', 'TEMP', 'TSK', 'SST', 'SKINTEMP'],       ('RdYlBu',   True)),   # blue=cold, red=hot
+    (['RAIN', 'PREC', 'SNOW', 'QRAIN', 'QSNOW', 'QICE'],   ('Blues',    False)),
+    (['U10', 'V10', 'WSPD', 'WIND', 'SPDUV', 'UV10'],       ('PuOr',    False)),
+    (['HGT', 'PHB', 'GEOP', 'ELEVATION', 'TOPO'],           ('terrain',  False)),
+    (['QVAPOR', 'Q2', 'RH', 'TD', 'QCLOUD'],                ('BuGn',    False)),
+    (['PSFC', 'SLP', 'PRES', 'PRESSURE'],                   ('RdPu',    False)),
+    (['PBLH'],                                              ('YlOrRd',  False)),
+    (['SWDOWN', 'GLW', 'OLR', 'SWNORM'],                    ('YlOrRd',  False)),
+    (['SMOIS', 'SH2O', 'SFROFF', 'UDROFF'],                 ('BrBG',    False)),
+    (['LH', 'HFX', 'GRDFLX'],                               ('RdBu',    True)),
+]
+_DEFAULT_RAMP = ('Spectral', False)
+
+# Fallback gradient stops when a named ramp isn't installed
+_FALLBACK_STOPS = [
+    (0.0,   QColor('#440154')),
+    (0.25,  QColor('#31688e')),
+    (0.5,   QColor('#35b779')),
+    (0.75,  QColor('#fde725')),
+]
+
+
+def _get_var_colormap(var_name: str):
+    """Return (ramp_name, invert) for a WRF variable name."""
+    vn = (var_name or '').upper()
+    for patterns, ramp_info in _VAR_COLORMAPS:
+        if any(p in vn for p in patterns):
+            return ramp_info
+    # Special-case single-letter 'T' (air temperature at model levels)
+    if vn.strip() == 'T':
+        return 'RdYlBu', True
+    return _DEFAULT_RAMP
+
+
+def _create_ramp(ramp_name: str, invert: bool):
+    """Get a QGIS color ramp by name, with a viridis-like fallback."""
+    try:
+        style = QgsStyle.defaultStyle()
+        ramp = style.colorRamp(ramp_name)
+        if ramp is not None:
+            if invert:
+                ramp.invert()
+            return ramp
+    except Exception:
+        pass
+    # Manual viridis fallback
+    stops = [QgsGradientStop(pos, col) for pos, col in _FALLBACK_STOPS[1:-1]]
+    ramp = QgsGradientColorRamp(_FALLBACK_STOPS[0][1], _FALLBACK_STOPS[-1][1], False, stops)
+    if invert:
+        ramp.invert()
+    return ramp
+
+
+def apply_smart_style(layer: QgsRasterLayer, var_name: str = '',
+                      vmin: float = None, vmax: float = None,
+                      ramp_name: str = None, invert: bool = None) -> None:
+    """Apply a pseudo-color renderer based on var name and data statistics.
+
+    Parameters
+    ----------
+    layer     : the raster layer to style
+    var_name  : WRF variable name used to pick a sensible colormap
+    vmin/vmax : explicit range; if None, computed from band statistics
+    ramp_name : override the auto-detected ramp name
+    invert    : override the auto-detected invert flag
+    """
+    provider = layer.dataProvider()  # type: QgsRasterDataProvider
+
+    # Compute data range from band 1 statistics if not provided
+    if vmin is None or vmax is None:
+        try:
+            stats = provider.bandStatistics(
+                1, QgsRasterBandStats.All, layer.extent(), 0)
+            vmin = stats.minimumValue if vmin is None else vmin
+            vmax = stats.maximumValue if vmax is None else vmax
+        except Exception:
+            vmin, vmax = 0.0, 1.0
+
+    # Guard against degenerate range
+    if vmin == vmax or vmax != vmax or vmin != vmin:  # nan check
+        vmax = vmin + 1.0
+
+    # Resolve colormap
+    if ramp_name is None:
+        ramp_name, auto_invert = _get_var_colormap(var_name)
+        if invert is None:
+            invert = auto_invert
+    if invert is None:
+        invert = False
+
+    ramp = _create_ramp(ramp_name, invert)
+
+    # Build the pseudo-color renderer
+    shader_fn = QgsColorRampShader(vmin, vmax, ramp)
+    shader_fn.setColorRampType(QgsColorRampShader.Interpolated)
+    shader_fn.classifyColorRamp(classes=256)
+
+    shader = QgsRasterShader()
+    shader.setRasterShaderFunction(shader_fn)
+
+    renderer = QgsSingleBandPseudoColorRenderer(provider, 1, shader)
+    layer.setRenderer(renderer)
+    layer.triggerRepaint()
+
+
+# ---------------------------------------------------------------------------
+# Original fix_style (palette support) — now delegates to apply_smart_style
+# ---------------------------------------------------------------------------
+
 def fix_style(layer: QgsRasterLayer) -> None:
-    ''' Sets a sensible default style for loaded raster layers and fix up other issues.
+    '''Sets a sensible default style for loaded raster layers and fix up other issues.
 
-    By default QGIS uses MultiBandColor renderer if there are multiple bands.
-    (See https://github.com/qgis/QGIS/blob/final-3_0_1/src/core/raster/qgsrasterlayer.cpp#L729).
-    This function picks the right renderers, either a palette or gray-band renderer.
-
-    Also, fake categories/classes that exist due to GDAL limitations are removed.
-    Search for UNUSED_CATEGORY_LABEL to find details. '''
-    provider = layer.dataProvider() # type: QgsRasterDataProvider
+    For paletted layers, removes fake UNUSED categories.
+    For continuous data, applies an intelligent pseudo-color ramp based on the
+    WRF variable name stored in layer.shortName().
+    '''
+    provider = layer.dataProvider()  # type: QgsRasterDataProvider
     color_interp = provider.colorInterpretation(1)
     is_palette = color_interp == QgsRaster.PaletteIndex
 
-    # See the link below on how to create default-type renderers.
-    # https://github.com/qgis/QGIS/blob/final-3_0_1/src/core/raster/qgsrasterrendererregistry.cpp#L128-L137
-
-    renderer = layer.renderer() # type: QgsRasterRenderer
-    new_renderer = None
+    renderer = layer.renderer()  # type: QgsRasterRenderer
     if is_palette:
-        # For paletted layers we always re-create the renderer even if it is already a
-        # paletted renderer. This is because we need to remove the UNUSED categories.
+        # Remove the UNUSED_CATEGORY_LABEL fake categories introduced by GDAL
         color_table = provider.colorTable(1)
         classes = QgsPalettedRasterRenderer.colorTableToClassData(color_table)
         if not any(c.label == gis4wrf.core.UNUSED_CATEGORY_LABEL for c in classes):
@@ -170,10 +280,10 @@ def fix_style(layer: QgsRasterLayer) -> None:
         new_renderer = QgsPalettedRasterRenderer(renderer.input(), 1, new_classes)
         layer.setRenderer(new_renderer)
     else:
-        if not isinstance(renderer, QgsSingleBandGrayRenderer):
-            new_renderer = QgsSingleBandGrayRenderer(renderer.input(), 1)
-            layer.setRenderer(new_renderer)
-            layer.setDefaultContrastEnhancement() # must be *after* setting the renderer
+        # Apply smart pseudo-color style using the WRF variable name
+        var_name = layer.shortName() or ''
+        apply_smart_style(layer, var_name)
+
 
 def get_raster_layers_in_group(group_name: str) -> List[QgsRasterLayer]:
     registry = QgsProject.instance() # type: QgsProject

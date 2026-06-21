@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QWidget, QTabWidget, QPushButton, QLayout, QVBoxLayout, QDialog, QGridLayout, QGroupBox, QSpinBox,
     QLabel, QHBoxLayout, QComboBox, QScrollArea, QFileDialog, QRadioButton, QLineEdit, QTableWidget,
     QTableWidgetItem, QTreeWidget, QTreeWidgetItem, QDockWidget, QSlider, QListWidget, QListWidgetItem,
-    QAbstractItemView, QHeaderView
+    QAbstractItemView, QHeaderView, QCheckBox
 )
 
 import gis4wrf.core
@@ -40,6 +40,7 @@ class ViewWidget(QWidget):
         self.create_time_selector()
         self.create_extra_dim_selector()
         self.create_interp_input()
+        self.create_colormap_panel()
         self.create_dataset_selector()
         self.setLayout(self.vbox)
 
@@ -107,6 +108,80 @@ class ViewWidget(QWidget):
         self.interp_container.setHidden(True)
         self.vbox.addWidget(self.interp_container)
 
+    def create_colormap_panel(self) -> None:
+        """Create the colormap / color range control panel."""
+        gbox = QGroupBox('Colormap')
+        gbox.setCheckable(False)
+        grid = QGridLayout()
+        gbox.setLayout(grid)
+
+        # Ramp selector
+        self.cmap_combo = QComboBox()
+        self._ramp_options = [
+            'Spectral', 'RdYlBu', 'RdBu', 'Blues', 'BuGn', 'Greens',
+            'YlOrRd', 'PuOr', 'Viridis', 'Magma', 'Plasma', 'Inferno',
+            'RdPu', 'BrBG', 'terrain', 'rainbow'
+        ]
+        for name in self._ramp_options:
+            self.cmap_combo.addItem(name)
+        self.cmap_combo.setCurrentText('Spectral')
+        grid.addWidget(QLabel('Ramp:'), 0, 0)
+        grid.addWidget(self.cmap_combo, 0, 1, 1, 2)
+
+        # Invert checkbox
+        self.cmap_invert = QCheckBox('Invert')
+        grid.addWidget(self.cmap_invert, 0, 3)
+
+        # Auto min/max
+        self.cmap_auto = QCheckBox('Auto min/max')
+        self.cmap_auto.setChecked(True)
+        self.cmap_auto.toggled.connect(self._on_cmap_auto_toggled)
+        grid.addWidget(self.cmap_auto, 1, 0, 1, 2)
+
+        # Manual min/max
+        float_val = QDoubleValidator()
+        self.cmap_min = QLineEdit()
+        self.cmap_min.setPlaceholderText('Min')
+        self.cmap_min.setEnabled(False)
+        self.cmap_min.setValidator(float_val)
+        self.cmap_max = QLineEdit()
+        self.cmap_max.setPlaceholderText('Max')
+        self.cmap_max.setEnabled(False)
+        self.cmap_max.setValidator(float_val)
+        grid.addWidget(self.cmap_min, 1, 2)
+        grid.addWidget(self.cmap_max, 1, 3)
+
+        # Apply button
+        apply_btn = QPushButton('Apply')
+        apply_btn.clicked.connect(self.on_apply_colormap)
+        grid.addWidget(apply_btn, 2, 0, 1, 4)
+
+        self.vbox.addWidget(gbox)
+
+    def _on_cmap_auto_toggled(self, checked: bool) -> None:
+        self.cmap_min.setEnabled(not checked)
+        self.cmap_max.setEnabled(not checked)
+
+    def on_apply_colormap(self) -> None:
+        """Reapply colormap with current panel settings to all layers in the current group."""
+        try:
+            dataset = self.get_dataset()
+        except Exception:
+            return
+
+        ramp_name = self.cmap_combo.currentText()
+        invert = self.cmap_invert.isChecked()
+        auto = self.cmap_auto.isChecked()
+        vmin = None if auto else (float(self.cmap_min.text()) if self.cmap_min.text() else None)
+        vmax = None if auto else (float(self.cmap_max.text()) if self.cmap_max.text() else None)
+
+        layers = plugin_geo.get_raster_layers_in_group(dataset.name)
+        for layer in layers:
+            var_name = layer.shortName() or ''
+            plugin_geo.apply_smart_style(layer, var_name,
+                                         vmin=vmin, vmax=vmax,
+                                         ramp_name=ramp_name, invert=invert)
+
     def create_dataset_selector(self) -> None:
         dataset_label = QLabel('Dataset:')
         self.dataset_selector = QComboBox()
@@ -115,6 +190,7 @@ class ViewWidget(QWidget):
         hbox.addWidget(dataset_label)
         hbox.addWidget(self.dataset_selector)
         self.vbox.addLayout(hbox)
+
 
     def add_dataset(self, path: str) -> None:
         variables = gis4wrf.core.get_supported_wrf_nc_variables(path)
@@ -252,8 +328,18 @@ class ViewWidget(QWidget):
         self.selected_variable[dataset.name] = var_name
         self.init_extra_dim_selector()
         self.init_interp_input(False)
+        self._sync_colormap_combo(var_name)
         self.replace_variable_layer()
         self.select_time_band_in_variable_layers()
+
+    def _sync_colormap_combo(self, var_name: str) -> None:
+        """Update the colormap combo to reflect the auto-detected ramp for this variable."""
+        ramp_name, invert = plugin_geo._get_var_colormap(var_name)
+        idx = self.cmap_combo.findText(ramp_name)
+        if idx >= 0:
+            self.cmap_combo.setCurrentIndex(idx)
+        self.cmap_invert.setChecked(invert)
+
         
     def on_time_selected(self, index: int) -> None:
         dataset = self.get_dataset()
