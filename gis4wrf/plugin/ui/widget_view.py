@@ -110,8 +110,8 @@ class ViewWidget(QWidget):
         self.vbox.addWidget(self.interp_container)
 
     def create_colormap_panel(self) -> None:
-        """Create the colormap / color range control panel."""
-        gbox = QGroupBox('Colormap')
+        """Create the colormap / layer controls panel."""
+        gbox = QGroupBox('Colormap & Layer Controls')
         gbox.setCheckable(False)
         grid = QGridLayout()
         gbox.setLayout(grid)
@@ -121,7 +121,7 @@ class ViewWidget(QWidget):
         self._ramp_options = [
             'Spectral', 'RdYlBu', 'RdBu', 'Blues', 'BuGn', 'Greens',
             'YlOrRd', 'PuOr', 'Viridis', 'Magma', 'Plasma', 'Inferno',
-            'RdPu', 'BrBG', 'terrain', 'rainbow'
+            'RdPu', 'BrBG', 'terrain', 'rainbow', 'coolwarm', 'jet'
         ]
         for name in self._ramp_options:
             self.cmap_combo.addItem(name)
@@ -152,12 +152,43 @@ class ViewWidget(QWidget):
         grid.addWidget(self.cmap_min, 1, 2)
         grid.addWidget(self.cmap_max, 1, 3)
 
-        # Apply button
-        apply_btn = QPushButton('Apply')
+        # Apply colormap button
+        apply_btn = QPushButton('Apply colormap')
         apply_btn.clicked.connect(self.on_apply_colormap)
-        grid.addWidget(apply_btn, 2, 0, 1, 4)
+        grid.addWidget(apply_btn, 2, 0, 1, 2)
+
+        # Bilinear smoothing checkbox
+        self.chk_bilinear = QCheckBox('Smooth (bilinear)')
+        self.chk_bilinear.setToolTip(
+            'Apply bilinear resampling to reduce pixelation in map view')
+        self.chk_bilinear.toggled.connect(self._on_bilinear_toggled)
+        grid.addWidget(self.chk_bilinear, 2, 2, 1, 2)
+
+        # ── Opacity (layer transparency in QGIS map) ──────────────────────────
+        grid.addWidget(QLabel('Opacity:'), 3, 0)
+        self.opacity_slider = QSlider(Qt.Horizontal)
+        self.opacity_slider.setRange(0, 100)
+        self.opacity_slider.setValue(100)
+        self.opacity_slider.setTickPosition(QSlider.TicksBelow)
+        self.opacity_slider.setTickInterval(10)
+        self.opacity_label  = QLabel('100 %')
+        self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
+        grid.addWidget(self.opacity_slider, 3, 1, 1, 2)
+        grid.addWidget(self.opacity_label,  3, 3)
+
+        # ── Extra tools row ───────────────────────────────────────────────────
+        contour_btn = QPushButton('📐 Add Contours')
+        contour_btn.setToolTip('Generate contour vector layer in QGIS from current raster band')
+        contour_btn.clicked.connect(self.on_add_contours)
+        grid.addWidget(contour_btn, 4, 0, 1, 2)
+
+        wind_btn = QPushButton('💨 Wind overlay')
+        wind_btn.setToolTip('Show wind barbs / quivers in a matplotlib popup')
+        wind_btn.clicked.connect(self.on_wind_overlay)
+        grid.addWidget(wind_btn, 4, 2, 1, 2)
 
         self.vbox.addWidget(gbox)
+
 
     def _on_cmap_auto_toggled(self, checked: bool) -> None:
         self.cmap_min.setEnabled(not checked)
@@ -182,6 +213,174 @@ class ViewWidget(QWidget):
             plugin_geo.apply_smart_style(layer, var_name,
                                          vmin=vmin, vmax=vmax,
                                          ramp_name=ramp_name, invert=invert)
+
+    def _on_opacity_changed(self, val: int) -> None:
+        """Set opacity of all layers in the current dataset group."""
+        self.opacity_label.setText(f'{val} %')
+        try:
+            dataset = self.get_dataset()
+        except Exception:
+            return
+        layers = plugin_geo.get_raster_layers_in_group(dataset.name)
+        for layer in layers:
+            layer.setOpacity(val / 100.0)
+            layer.triggerRepaint()
+
+    def _on_bilinear_toggled(self, checked: bool) -> None:
+        """Toggle bilinear resampling to smooth pixelated rasters."""
+        try:
+            dataset = self.get_dataset()
+        except Exception:
+            return
+        layers = plugin_geo.get_raster_layers_in_group(dataset.name)
+        from qgis.core import QgsRasterLayer
+        for layer in layers:
+            try:
+                if checked:
+                    layer.setZoomedInResamplingMethod(QgsRasterLayer.ResamplingBilinear)
+                    layer.setZoomedOutResamplingMethod(QgsRasterLayer.ResamplingBilinear)
+                else:
+                    layer.setZoomedInResamplingMethod(QgsRasterLayer.ResamplingNearestNeighbour)
+                    layer.setZoomedOutResamplingMethod(QgsRasterLayer.ResamplingNearestNeighbour)
+            except AttributeError:
+                try:
+                    from qgis.core import Qgis
+                    method = (Qgis.RasterResamplingMethod.Bilinear if checked
+                              else Qgis.RasterResamplingMethod.Nearest)
+                    layer.setZoomedInResamplingMethod(method)
+                    layer.setZoomedOutResamplingMethod(method)
+                except Exception:
+                    pass
+            layer.triggerRepaint()
+
+    def on_add_contours(self) -> None:
+        """Generate a contour vector layer from the current raster and add to QGIS."""
+        try:
+            dataset = self.get_dataset()
+        except Exception:
+            return
+        layers = plugin_geo.get_raster_layers_in_group(dataset.name)
+        if not layers:
+            return
+        layer = layers[0]
+        try:
+            from osgeo import gdal, ogr
+            import tempfile
+            src = gdal.Open(layer.source())
+            if src is None:
+                raise RuntimeError('Cannot open raster source for contouring')
+            band_idx = self.get_time_index() + 1
+            band = src.GetRasterBand(band_idx)
+            stats = band.GetStatistics(True, True)
+            vmin, vmax = stats[0], stats[1]
+            interval = (vmax - vmin) / 10.0
+            if interval <= 0:
+                interval = 1.0
+
+            tmp = tempfile.mktemp(suffix='.gpkg')
+            driver = ogr.GetDriverByName('GPKG')
+            out_ds = driver.CreateDataSource(tmp)
+            srs_wkt = src.GetProjection()
+            from osgeo import osr
+            srs = osr.SpatialReference()
+            srs.ImportFromWkt(srs_wkt)
+            out_layer = out_ds.CreateLayer('contours', srs=srs,
+                                           geom_type=ogr.wkbMultiLineString)
+            field = ogr.FieldDefn('LEVEL', ogr.OFTReal)
+            out_layer.CreateField(field)
+            gdal.ContourGenerate(band, interval, 0, [], 0, 0, out_layer, 0, 1)
+            out_ds = None
+
+            from qgis.core import QgsVectorLayer, QgsProject
+            var_name = layer.shortName() or 'var'
+            vlayer = QgsVectorLayer(tmp, f'{var_name} contours', 'ogr')
+            if vlayer.isValid():
+                QgsProject.instance().addMapLayer(vlayer)
+            else:
+                raise RuntimeError('Contour layer is not valid')
+        except Exception as exc:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, 'Contours', f'Error generating contours:\n{exc}')
+
+    def on_wind_overlay(self) -> None:
+        """Open a matplotlib popup showing wind barbs / quivers overlaid on the variable."""
+        try:
+            dataset  = self.get_dataset()
+            variable = self.get_variable()
+        except Exception:
+            return
+        try:
+            import matplotlib
+            matplotlib.use('Qt5Agg')
+            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+            from matplotlib.figure import Figure
+            from netCDF4 import Dataset as NC4Dataset
+            import numpy as np
+
+            with NC4Dataset(dataset.path) as ds:
+                # Find U/V wind
+                for uname, vname in [('U10', 'V10'), ('U', 'V')]:
+                    u_var = ds.variables.get(uname)
+                    v_var = ds.variables.get(vname)
+                    if u_var is not None and v_var is not None:
+                        break
+                else:
+                    from PyQt5.QtWidgets import QMessageBox
+                    QMessageBox.information(self, 'Wind overlay',
+                        'U10/V10 or U/V not found in this file.')
+                    return
+
+                t = self.get_time_index()
+                u = np.array(u_var[t]); v = np.array(v_var[t])
+                if u.ndim == 3:
+                    lev = self.get_extra_dim_index() or 0
+                    u = u[lev]; v = v[lev]
+
+                xlat  = ds.variables.get('XLAT')
+                xlong = ds.variables.get('XLONG')
+                lats  = np.squeeze(xlat[0])  if xlat  is not None else None
+                lons  = np.squeeze(xlong[0]) if xlong is not None else None
+
+            ny, nx = u.shape[0], u.shape[1]
+            step = max(1, min(ny, nx) // 18)
+            u_s  = u[::step, :nx:step];  v_s = v[:ny:step, ::step]
+            if lons is not None:
+                lo_s = lons[::step, ::step]; la_s = lats[::step, ::step]
+            else:
+                lo_s, la_s = (np.arange(nx)[::step][np.newaxis, :] * np.ones((len(range(0, ny, step)), 1)),
+                              np.arange(ny)[::step][:, np.newaxis] * np.ones((1, len(range(0, nx, step)))))
+            # Clip to same shape
+            n = min(lo_s.shape[0], u_s.shape[0], v_s.shape[0])
+            m = min(lo_s.shape[1], u_s.shape[1], v_s.shape[1])
+            lo_s, la_s, u_s, v_s = lo_s[:n, :m], la_s[:n, :m], u_s[:n, :m], v_s[:n, :m]
+            spd = np.hypot(u_s, v_s)
+
+            from PyQt5.QtWidgets import QDialog, QVBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle(f'Wind overlay — {dataset.name}')
+            dlg.resize(800, 600)
+            fig = Figure(facecolor='#1a1a2e', tight_layout=True)
+            canvas = FigureCanvasQTAgg(fig)
+            ax = fig.add_subplot(111)
+            ax.set_facecolor('#0d0d1a')
+            ax.tick_params(colors='#aaa')
+            t_str = dataset.times[t] if dataset.times else ''
+            ax.set_title(f'Wind — {uname}/{vname}  {t_str}', color='white')
+            q = ax.quiver(lo_s, la_s, u_s, v_s, spd,
+                          cmap='plasma', scale=None, width=0.003)
+            cb = fig.colorbar(q, ax=ax, pad=0.02, fraction=0.04)
+            cb.set_label('Wind speed (m/s)', color='#ccc')
+            for lbl in cb.ax.get_yticklabels():
+                lbl.set_color('#aaa')
+            ax.set_xlabel('Longitude' if lons is not None else 'X', color='#ccc')
+            ax.set_ylabel('Latitude'  if lons is not None else 'Y', color='#ccc')
+            lay = QVBoxLayout(dlg)
+            lay.addWidget(canvas)
+            dlg.show()
+        except Exception as exc:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, 'Wind overlay', f'Error:\n{exc}')
+
 
     def create_dataset_selector(self) -> None:
         dataset_label = QLabel('Dataset:')
