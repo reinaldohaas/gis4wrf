@@ -755,3 +755,44 @@ class View3DDialog(QDialog):
             self.fig.savefig(path, dpi=200, bbox_inches='tight',
                              facecolor=self.fig.get_facecolor())
             QMessageBox.information(self, 'Saved', f'Image saved:\n{path}')
+
+    def _on_coast_toggle(self, on: bool) -> None:
+        self._update_plot()
+
+    def _on_var_changed(self, var_name: str) -> None:
+        self.var_name = var_name
+        self.setWindowTitle(f'3D View — {var_name}')
+        self._data_cache.clear()
+        try:
+            self._load_nc()
+            self._lev_slider.setRange(0, max(0, self.n_levs - 1))
+            if self.level_idx >= self.n_levs:
+                self.level_idx = max(0, self.n_levs - 1)
+            self._lev_slider.setValue(self.level_idx)
+            self._lev_slider.setEnabled(self.is_3d)
+            if not self.is_3d and self._mode in (MODE_LEVELS, MODE_CUTS):
+                self._mode_group.buttons()[0].setChecked(True)
+                
+            self._chk_wind.setEnabled(self._has_wind)
+            self._chk_coast.setEnabled(getattr(self, 'landmask', None) is not None)
+        except Exception:
+            pass
+        self._update_plot()
+
+    def _on_autorotate_toggled(self, checked: bool) -> None:
+        if checked:
+            if not hasattr(self, '_rotate_timer'):
+                from PyQt5.QtCore import QTimer
+                self._rotate_timer = QTimer(self)
+                self._rotate_timer.timeout.connect(self._do_rotate)
+            self._rotate_timer.start(50)
+        else:
+            if hasattr(self, '_rotate_timer'):
+                self._rotate_timer.stop()
+
+    def _do_rotate(self):
+        if hasattr(self, 'fig') and self.fig.axes and self._mode != MODE_CONTOUR:
+            ax = self.fig.axes[0]
+            if hasattr(ax, 'azim'):
+                ax.azim = (ax.azim + 1) % 360
+                self.canvas.draw_idle()
