@@ -18,6 +18,7 @@ import gis4wrf.core
 from gis4wrf.core import WRFNetCDFVariable, WRFNetCDFVariableSource
 from gis4wrf.plugin import geo as plugin_geo
 from gis4wrf.plugin.ui.helpers import add_grid_lineedit, add_grid_combobox, dispose_after_delete
+from gis4wrf.plugin.ui.dialog_3d_view import View3DDialog
 
 Dataset = namedtuple('Dataset', [
     'name', # str
@@ -190,6 +191,11 @@ class ViewWidget(QWidget):
         hbox.addWidget(dataset_label)
         hbox.addWidget(self.dataset_selector)
         self.vbox.addLayout(hbox)
+
+        btn_3d = QPushButton('🌐  Open 3D View')
+        btn_3d.setToolTip('Open interactive 3D visualisation for the selected variable')
+        btn_3d.clicked.connect(self.on_open_3d_view)
+        self.vbox.addWidget(btn_3d)
 
 
     def add_dataset(self, path: str) -> None:
@@ -438,3 +444,27 @@ class ViewWidget(QWidget):
 
     def get_variable(self) -> WRFNetCDFVariable:
         return self.get_dataset().variables[self.get_var_name()]
+
+    def on_open_3d_view(self) -> None:
+        """Open the interactive 3D visualisation dialog."""
+        try:
+            dataset  = self.get_dataset()
+            variable = self.get_variable()
+        except Exception:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, '3D View',
+                'Please select a dataset and a variable first.')
+            return
+
+        dlg = View3DDialog(
+            dataset_path    = dataset.path,
+            var_name        = variable.name,
+            var_description = variable.description or '',
+            var_units       = variable.units or '',
+            time_idx        = self.get_time_index(),
+            extra_dim_idx   = self.get_extra_dim_index(),
+            times           = dataset.times,
+            cmap_name       = self.cmap_combo.currentText(),
+            parent          = self
+        )
+        dlg.show()   # non-modal so the user can still interact with QGIS
