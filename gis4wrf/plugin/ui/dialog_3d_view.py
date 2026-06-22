@@ -110,6 +110,7 @@ class View3DDialog(QDialog):
         self._show_wind   = False
         self._filter_min  = 0.0
         self._filter_max  = 1.0
+        self._zoom_factor = 1.0
         self._data_cache: dict = {}
 
         self.setWindowTitle(f'3D View — {var_name}  ({var_description})')
@@ -389,13 +390,24 @@ class View3DDialog(QDialog):
         app_lay.addWidget(self._fmax_slider, 5, 1)
         app_lay.addWidget(self._fmax_label, 5, 2)
 
+        app_lay.addWidget(QLabel('Zoom:'), 6, 0)
+        self._zoom_slider = QSlider(Qt.Horizontal)
+        self._zoom_slider.setRange(50, 300)
+        self._zoom_slider.setValue(int(self._zoom_factor * 100))
+        self._zoom_slider.setTickPosition(QSlider.TicksBelow)
+        self._zoom_slider.setTickInterval(50)
+        self._zoom_label = QLabel(f'{int(self._zoom_factor*100)} %')
+        self._zoom_slider.valueChanged.connect(self._on_zoom)
+        app_lay.addWidget(self._zoom_slider, 6, 1)
+        app_lay.addWidget(self._zoom_label, 6, 2)
+
         self.chk_autorotate = QCheckBox('Auto Rotate')
         self.chk_autorotate.toggled.connect(self._on_autorotate_toggled)
-        app_lay.addWidget(self.chk_autorotate, 6, 0, 1, 3)
+        app_lay.addWidget(self.chk_autorotate, 7, 0, 1, 3)
 
         save_btn = QPushButton('💾 Save PNG')
         save_btn.clicked.connect(self._export_png)
-        app_lay.addWidget(save_btn, 7, 0, 1, 3)
+        app_lay.addWidget(save_btn, 8, 0, 1, 3)
         row.addWidget(app_box)
 
         row.addStretch()
@@ -447,6 +459,15 @@ class View3DDialog(QDialog):
             ax.set_box_aspect((1, 1, 0.4))
         except Exception:
             pass
+            
+        if hasattr(ax, 'dist'):
+            ax.dist = 10.0 / getattr(self, '_zoom_factor', 1.0)
+            
+        try:
+            self.fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95)
+        except Exception:
+            pass
+            
         return ax
 
     def _make_ax2d(self):
@@ -853,3 +874,12 @@ class View3DDialog(QDialog):
         self._filter_max = val / 100.0
         self._fmax_label.setText(f'{val} %')
         self._update_plot()
+        
+    def _on_zoom(self, val: int) -> None:
+        self._zoom_factor = val / 100.0
+        self._zoom_label.setText(f'{val} %')
+        if hasattr(self, 'fig') and self.fig.axes and self._mode != MODE_CONTOUR:
+            ax = self.fig.axes[0]
+            if hasattr(ax, 'dist'):
+                ax.dist = 10.0 / self._zoom_factor
+            self.canvas.draw_idle()
