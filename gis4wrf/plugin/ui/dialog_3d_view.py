@@ -108,6 +108,8 @@ class View3DDialog(QDialog):
         self._ew_pos      = 0.5     # fraction 0-1 → longitude of NS curtain
         self._show_terrain= True
         self._show_wind   = False
+        self._filter_min  = 0.0
+        self._filter_max  = 1.0
         self._data_cache: dict = {}
 
         self.setWindowTitle(f'3D View — {var_name}  ({var_description})')
@@ -365,13 +367,35 @@ class View3DDialog(QDialog):
         app_lay.addWidget(self._vexag_slider, 3, 1)
         app_lay.addWidget(self._vexag_label, 3, 2)
 
+        app_lay.addWidget(QLabel('Filter Min %:'), 4, 0)
+        self._fmin_slider = QSlider(Qt.Horizontal)
+        self._fmin_slider.setRange(0, 100)
+        self._fmin_slider.setValue(int(self._filter_min * 100))
+        self._fmin_slider.setTickPosition(QSlider.TicksBelow)
+        self._fmin_slider.setTickInterval(10)
+        self._fmin_label = QLabel(f'{int(self._filter_min*100)} %')
+        self._fmin_slider.valueChanged.connect(self._on_fmin)
+        app_lay.addWidget(self._fmin_slider, 4, 1)
+        app_lay.addWidget(self._fmin_label, 4, 2)
+
+        app_lay.addWidget(QLabel('Filter Max %:'), 5, 0)
+        self._fmax_slider = QSlider(Qt.Horizontal)
+        self._fmax_slider.setRange(0, 100)
+        self._fmax_slider.setValue(int(self._filter_max * 100))
+        self._fmax_slider.setTickPosition(QSlider.TicksBelow)
+        self._fmax_slider.setTickInterval(10)
+        self._fmax_label = QLabel(f'{int(self._filter_max*100)} %')
+        self._fmax_slider.valueChanged.connect(self._on_fmax)
+        app_lay.addWidget(self._fmax_slider, 5, 1)
+        app_lay.addWidget(self._fmax_label, 5, 2)
+
         self.chk_autorotate = QCheckBox('Auto Rotate')
         self.chk_autorotate.toggled.connect(self._on_autorotate_toggled)
-        app_lay.addWidget(self.chk_autorotate, 4, 0, 1, 3)
+        app_lay.addWidget(self.chk_autorotate, 6, 0, 1, 3)
 
         save_btn = QPushButton('💾 Save PNG')
         save_btn.clicked.connect(self._export_png)
-        app_lay.addWidget(save_btn, 5, 0, 1, 3)
+        app_lay.addWidget(save_btn, 7, 0, 1, 3)
         row.addWidget(app_box)
 
         row.addStretch()
@@ -461,12 +485,17 @@ class View3DDialog(QDialog):
 
         cmap = self._cmap_obj()
         norm, vmin, vmax = self._norm(data_s)
-        colors = cmap(norm(np.nan_to_num(data_s, nan=vmin)))
+        norm_data = norm(np.nan_to_num(data_s, nan=vmin))
+        colors = cmap(norm_data)
+        if hasattr(self, '_filter_min') and self._filter_min > 0:
+            colors[norm_data < self._filter_min, 3] = 0.0
+        if hasattr(self, '_filter_max') and self._filter_max < 1.0:
+            colors[norm_data > self._filter_max, 3] = 0.0
 
         ax = self._make_ax3d(f'  (level {self.level_idx})' if self.is_3d else '')
         ax.plot_surface(lons_s, lats_s, terr_s * self._vert_exag,
                         facecolors=colors, shade=True,
-                        alpha=self._alpha, linewidth=0, antialiased=False)
+                        alpha=self._alpha, linewidth=0, antialiased=True)
 
         ax.set_xlabel('Longitude' if self.lons is not None else 'X')
         ax.set_ylabel('Latitude'  if self.lats is not None else 'Y')
@@ -507,11 +536,17 @@ class View3DDialog(QDialog):
             sl = self.var_all[t, ilev, :ny, :nx]
             sl_s, lons_s, lats_s = self._sub(sl, lons, lats)
             z_val = (ilev / max(nl - 1, 1)) * z_max
-            colors = cmap(norm(np.nan_to_num(sl_s, nan=vmin)))
+            norm_data = norm(np.nan_to_num(sl_s, nan=vmin))
+            colors = cmap(norm_data)
+            if hasattr(self, '_filter_min') and self._filter_min > 0:
+                colors[norm_data < self._filter_min, 3] = 0.0
+            if hasattr(self, '_filter_max') and self._filter_max < 1.0:
+                colors[norm_data > self._filter_max, 3] = 0.0
+                
             ax.plot_surface(lons_s, lats_s, np.full_like(lons_s, z_val),
                             facecolors=colors, shade=False,
                             alpha=max(0.05, self._alpha * 0.55),
-                            linewidth=0, antialiased=False)
+                            linewidth=0, antialiased=True)
 
         ax.set_xlabel('Longitude' if self.lons is not None else 'X')
         ax.set_ylabel('Latitude'  if self.lats is not None else 'Y')
@@ -549,10 +584,16 @@ class View3DDialog(QDialog):
 
         LON_ew, LEV_ew = np.meshgrid(lon_s, lev_z)
         LAT_ew = np.full_like(LON_ew, lat_val)
-        col_ew  = cmap(norm(np.nan_to_num(data_ews, nan=vmin)))
+        norm_ew = norm(np.nan_to_num(data_ews, nan=vmin))
+        col_ew  = cmap(norm_ew)
+        if hasattr(self, '_filter_min') and self._filter_min > 0:
+            col_ew[norm_ew < self._filter_min, 3] = 0.0
+        if hasattr(self, '_filter_max') and self._filter_max < 1.0:
+            col_ew[norm_ew > self._filter_max, 3] = 0.0
+            
         ax.plot_surface(LON_ew, LAT_ew, LEV_ew,
                         facecolors=col_ew, shade=False,
-                        alpha=self._alpha, linewidth=0, antialiased=False)
+                        alpha=self._alpha, linewidth=0, antialiased=True)
 
         # ── NS curtain (fixed EW position → fixed longitude column ix) ───────
         ix = max(0, min(nx - 1, int(self._ew_pos * (nx - 1))))
@@ -566,10 +607,16 @@ class View3DDialog(QDialog):
 
         LAT_ns, LEV_ns = np.meshgrid(lat_s, lev_z)
         LON_ns = np.full_like(LAT_ns, lon_val)
-        col_ns  = cmap(norm(np.nan_to_num(data_nss, nan=vmin)))
+        norm_ns = norm(np.nan_to_num(data_nss, nan=vmin))
+        col_ns  = cmap(norm_ns)
+        if hasattr(self, '_filter_min') and self._filter_min > 0:
+            col_ns[norm_ns < self._filter_min, 3] = 0.0
+        if hasattr(self, '_filter_max') and self._filter_max < 1.0:
+            col_ns[norm_ns > self._filter_max, 3] = 0.0
+            
         ax.plot_surface(LON_ns, LAT_ns, LEV_ns,
                         facecolors=col_ns, shade=False,
-                        alpha=self._alpha, linewidth=0, antialiased=False)
+                        alpha=self._alpha, linewidth=0, antialiased=True)
 
         # ── Optional terrain base ─────────────────────────────────────────────
         if self._show_terrain and self.terrain is not None:
@@ -796,3 +843,13 @@ class View3DDialog(QDialog):
             if hasattr(ax, 'azim'):
                 ax.azim = (ax.azim + 1) % 360
                 self.canvas.draw_idle()
+
+    def _on_fmin(self, val: int) -> None:
+        self._filter_min = val / 100.0
+        self._fmin_label.setText(f'{val} %')
+        self._update_plot()
+        
+    def _on_fmax(self, val: int) -> None:
+        self._filter_max = val / 100.0
+        self._fmax_label.setText(f'{val} %')
+        self._update_plot()
