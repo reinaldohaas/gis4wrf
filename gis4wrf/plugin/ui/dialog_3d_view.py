@@ -91,6 +91,7 @@ class View3DDialog(QDialog):
         parent=None
     ):
         super().__init__(parent)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         self.dataset_path = dataset_path
         self.var_name     = var_name
         self.var_desc     = var_description
@@ -215,22 +216,14 @@ class View3DDialog(QDialog):
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
+        root = QHBoxLayout(self)
         root.setSpacing(4)
-
-        # ── canvas ───────────────────────────────────────────────────────────
-        self.fig    = Figure(facecolor='#1a1a2e', tight_layout=True)
-        self.canvas = FigureCanvas(self.fig)
-        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        nav = NavToolbar(self.canvas, self)
-        nav.setStyleSheet('background:#1a1a2e; color:white;')
-        root.addWidget(nav)
-        root.addWidget(self.canvas)
+        root.setContentsMargins(4, 4, 4, 4)
 
         # ── control strip (scrollable) ────────────────────────────────────────
         strip = QWidget()
-        row   = QHBoxLayout(strip)
-        row.setSpacing(8)
+        strip_lay = QVBoxLayout(strip)
+        strip_lay.setSpacing(8)
 
         # ── Mode ──────────────────────────────────────────────────────────────
         mode_box = QGroupBox('Mode')
@@ -266,7 +259,7 @@ class View3DDialog(QDialog):
             self._chk_wind.setToolTip('U10/V10 not found in this file')
         self._chk_wind.toggled.connect(self._on_wind_toggle)
         mode_lay.addWidget(self._chk_wind)
-        row.addWidget(mode_box)
+        strip_lay.addWidget(mode_box)
 
         # ── Cross-section positions ───────────────────────────────────────────
         cuts_box = QGroupBox('Cross-section position')
@@ -294,7 +287,7 @@ class View3DDialog(QDialog):
         cuts_lay.addWidget(self._ew_slider, 1, 1)
         cuts_lay.addWidget(self._ew_label,  1, 2)
 
-        row.addWidget(cuts_box)
+        strip_lay.addWidget(cuts_box)
 
         # ── Time + Level ──────────────────────────────────────────────────────
         tl_box = QGroupBox('Time / Level')
@@ -323,7 +316,7 @@ class View3DDialog(QDialog):
         tl_lay.addWidget(QLabel('Vertical level:'))
         tl_lay.addWidget(self._lev_label)
         tl_lay.addWidget(self._lev_slider)
-        row.addWidget(tl_box)
+        strip_lay.addWidget(tl_box)
 
         # ── Appearance ────────────────────────────────────────────────────────
         app_box = QGroupBox('Appearance')
@@ -408,10 +401,30 @@ class View3DDialog(QDialog):
         save_btn = QPushButton('💾 Save PNG')
         save_btn.clicked.connect(self._export_png)
         app_lay.addWidget(save_btn, 8, 0, 1, 3)
-        row.addWidget(app_box)
+        strip_lay.addWidget(app_box)
 
-        row.addStretch()
-        root.addWidget(strip)
+        strip_lay.addStretch()
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(strip)
+        scroll.setFixedWidth(280)
+
+        # ── canvas ───────────────────────────────────────────────────────────
+        self.fig    = Figure(facecolor='#1a1a2e', tight_layout=True)
+        self.canvas = FigureCanvas(self.fig)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        nav = NavToolbar(self.canvas, self)
+        nav.setStyleSheet('background:#1a1a2e; color:white;')
+        
+        plot_widget = QWidget()
+        plot_lay = QVBoxLayout(plot_widget)
+        plot_lay.setContentsMargins(0, 0, 0, 0)
+        plot_lay.addWidget(nav)
+        plot_lay.addWidget(self.canvas)
+
+        root.addWidget(scroll)
+        root.addWidget(plot_widget)
 
     # ── plotting dispatcher ───────────────────────────────────────────────────
 
