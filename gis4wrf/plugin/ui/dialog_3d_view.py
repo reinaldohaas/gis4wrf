@@ -582,6 +582,9 @@ class View3DDialog(QDialog):
                             alpha=max(0.05, self._alpha * 0.55),
                             linewidth=0, antialiased=True)
 
+            if self._show_wind and self._has_wind:
+                self._add_wind_quiver(ax, np.full_like(lons_s, z_val), lons_s, lats_s, level_idx=ilev)
+
         ax.set_xlabel('Longitude' if self.lons is not None else 'X')
         ax.set_ylabel('Latitude'  if self.lats is not None else 'Y')
         ax.set_zlabel('Eta level (0 = surface, 1000 = top)')
@@ -675,12 +678,13 @@ class View3DDialog(QDialog):
         ax.set_zlabel('Eta level (0=surface → top)')
 
         if self._show_wind and self._has_wind:
-            # quiver at surface level
-            sl = self._get_2d_slice()
-            ny2, nx2 = sl.shape
+            # quiver at multiple levels
             lo_s, la_s = self._sub(lons, lats, n=15)
-            z_s = np.zeros_like(lo_s)
-            self._add_wind_quiver(ax, z_s, lo_s, la_s)
+            lev_indices = np.linspace(0, nl - 1, min(nl, 7), dtype=int)
+            for ilev in lev_indices:
+                z_val = (ilev / max(nl - 1, 1)) * self._vert_exag * 1.0
+                z_s = np.full_like(lo_s, z_val)
+                self._add_wind_quiver(ax, z_s, lo_s, la_s, level_idx=ilev)
 
         self._add_colorbar(ax, cmap, norm, vmin, vmax)
 
@@ -735,12 +739,14 @@ class View3DDialog(QDialog):
 
     # ── Wind helpers ──────────────────────────────────────────────────────────
 
-    def _get_wind_slice(self, ny, nx, step=1):
+    def _get_wind_slice(self, ny, nx, step=1, level_idx=None):
         """Return (u_s, v_s) subsampled wind slices or (None, None)."""
+        if level_idx is None:
+            level_idx = self.level_idx
         try:
             if self._wind_3d:
-                u = self._wind_u[self.time_idx, self.level_idx]
-                v = self._wind_v[self.time_idx, self.level_idx]
+                u = self._wind_u[self.time_idx, level_idx]
+                v = self._wind_v[self.time_idx, level_idx]
             else:
                 u = self._wind_u[self.time_idx]
                 v = self._wind_v[self.time_idx]
@@ -756,12 +762,13 @@ class View3DDialog(QDialog):
         except Exception:
             return None, None
 
-    def _add_wind_quiver(self, ax, z_surf, lons_s, lats_s) -> None:
+    def _add_wind_quiver(self, ax, z_surf, lons_s, lats_s, level_idx=None) -> None:
         ny_s, nx_s = lons_s.shape
         u_s, v_s = self._get_wind_slice(
             self.var_all.shape[-2], self.var_all.shape[-1],
             step=max(1, min(self.var_all.shape[-2],
-                            self.var_all.shape[-1]) // 15)
+                            self.var_all.shape[-1]) // 15),
+            level_idx=level_idx
         )
         if u_s is None:
             return
