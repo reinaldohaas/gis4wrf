@@ -39,8 +39,17 @@ from PyQt5.QtWidgets import (
     QLabel, QSlider, QComboBox, QCheckBox,
     QGroupBox, QRadioButton, QButtonGroup, QSizePolicy,
     QFileDialog, QMessageBox, QWidget, QGridLayout,
-    QScrollArea, QFrame
+    QScrollArea, QFrame, QListWidget, QListWidgetItem
 )
+
+try:
+    from qgis.core import (
+        QgsProject, QgsMapLayerType, QgsWkbTypes,
+        QgsCoordinateReferenceSystem, QgsCoordinateTransform
+    )
+    HAS_QGIS = True
+except ImportError:
+    HAS_QGIS = False
 
 try:
     import matplotlib
@@ -401,7 +410,29 @@ class View3DDialog(QDialog):
         save_btn = QPushButton('💾 Save PNG')
         save_btn.clicked.connect(self._export_png)
         app_lay.addWidget(save_btn, 8, 0, 1, 3)
+        
+        export_py_btn = QPushButton('📜 Export Python Script')
+        export_py_btn.clicked.connect(self._export_python_script)
+        app_lay.addWidget(export_py_btn, 9, 0, 1, 3)
         strip_lay.addWidget(app_box)
+
+        # ── Vector Overlays ───────────────────────────────────────────────────
+        if HAS_QGIS:
+            vec_box = QGroupBox('Vector Overlays')
+            vec_lay = QVBoxLayout(vec_box)
+            self._vector_list = QListWidget()
+            self._vector_list.setSelectionMode(QListWidget.NoSelection)
+            self._vector_layers_map = {}
+            for layer in QgsProject.instance().mapLayers().values():
+                if layer.type() == QgsMapLayerType.VectorLayer:
+                    item = QListWidgetItem(layer.name())
+                    item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                    item.setCheckState(Qt.Unchecked)
+                    self._vector_list.addItem(item)
+                    self._vector_layers_map[layer.name()] = layer
+            self._vector_list.itemChanged.connect(self._on_vector_changed)
+            vec_lay.addWidget(self._vector_list)
+            strip_lay.addWidget(vec_box)
 
         strip_lay.addStretch()
         
@@ -546,6 +577,8 @@ class View3DDialog(QDialog):
             except Exception:
                 pass
 
+        self._add_vector_overlays(ax, lons_s, lats_s, terr_s * self._vert_exag)
+        
         self._add_colorbar(ax, cmap, norm, vmin, vmax)
 
     # ── Level slices mode ─────────────────────────────────────────────────────
@@ -727,6 +760,8 @@ class View3DDialog(QDialog):
                           spd, cmap='Greys_r', alpha=0.85,
                           scale=None, width=0.003)
 
+        self._add_vector_overlays(ax, lons, lats, None)
+
         ax.set_xlabel('Longitude' if self.lons is not None else 'X')
         ax.set_ylabel('Latitude'  if self.lats is not None else 'Y')
 
@@ -781,6 +816,76 @@ class View3DDialog(QDialog):
                   length=0.4, normalize=False,
                   color='white', alpha=0.85,
                   linewidth=0.6, arrow_length_ratio=0.35)
+
+    def _add_vector_overlays(self, ax, lons, lats, z_surf) -> None:
+        if not HAS_QGIS or not hasattr(self, '_vector_list'):
+            return
+            
+        min_lon, max_lon = float(np.min(lons)), float(np.max(lons))
+        min_lat, max_lat = float(np.min(lats)), float(np.max(lats))
+        rect = QgsRectangle(min_lon, min_lat, max_lon, max_lat)
+        
+        from scipy.interpolate import griddata
+        if z_surf is not None:
+            points = np.column_stack((lons.flatten(), lats.flatten()))
+            values = z_surf.flatten()
+            z_offset = (np.max(values) - np.min(values)) * 0.05
+            if z_offset == 0:
+                z_offset = 0.5
+        
+        for i in range(self._vector_list.count()):
+            item = self._vector_list.item(i)
+            if item.checkState() == Qt.Checked:
+                layer = self._vector_layers_map[item.text()]
+                
+                crsSrc = layer.crs()
+                crsDest = QgsCoordinateReferenceSystem("EPSG:4326")
+                transform = QgsCoordinateTransform(crsSrc, crsDest, QgsProject.instance())
+                
+                try:
+                    inv_transform = QgsCoordinateTransform(crsDest, crsSrc, QgsProject.instance())
+                    req_rect = inv_transform.transformBoundingBox(rect)
+                    request = QgsFeatureRequest().setFilterRect(req_rect)
+                except Exception:
+                    request = QgsFeatureRequest()
+                
+                for feat in layer.getFeatures(request):
+                    geom = feat.geometry()
+                    if geom.isNull():
+                        continue
+                    try:
+                        geom.transform(transform)
+                    except Exception:
+                        continue
+                        
+                    if geom.type() == QgsWkbTypes.LineGeometry:
+                        lines = geom.asMultiPolyline() if geom.isMultipart() else [geom.asPolyline()]
+                    elif geom.type() == QgsWkbTypes.PolygonGeometry:
+                        lines = []
+                        if geom.isMultipart():
+                            for poly in geom.asMultiPolygon():
+                                lines.extend(poly)
+                        else:
+                            lines.extend(geom.asPolygon())
+                    elif geom.type() == QgsWkbTypes.PointGeometry:
+                        pts = geom.asMultiPoint() if geom.isMultipart() else [geom.asPoint()]
+                        lines = [pts]
+                    else:
+                        continue
+                        
+                    for line in lines:
+                        if not line:
+                            continue
+                        xs = np.array([pt.x() for pt in line])
+                        ys = np.array([pt.y() for pt in line])
+                        
+                        if z_surf is None:
+                            # 2D Contour mode
+                            ax.plot(xs, ys, color='white', linewidth=1.0, alpha=0.8)
+                        else:
+                            # 3D modes
+                            zs = griddata(points, values, (xs, ys), method='nearest')
+                            ax.plot(xs, ys, zs + z_offset, color='white', linewidth=1.5, alpha=0.9)
 
     # ── event handlers ────────────────────────────────────────────────────────
 
@@ -903,3 +1008,101 @@ class View3DDialog(QDialog):
             if hasattr(ax, 'dist'):
                 ax.dist = 10.0 / self._zoom_factor
             self.canvas.draw_idle()
+
+    def _on_vector_changed(self, item) -> None:
+        self._update_plot()
+        
+    def _export_python_script(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, 'Export Python Script', '', 'Python Files (*.py)')
+        if not path:
+            return
+            
+        py_code = f'''# GIS4WRF - Auto-generated Visualization Script
+# You can run this in the QGIS Python Console or in a standalone Python environment.
+import numpy as np
+import netCDF4 as nc
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+
+# Data Source
+NC_FILE = r"{self.dataset_path}"
+VAR_NAME = "{self.var_name}"
+TIME_IDX = {self.time_idx}
+LEVEL_IDX = {self.level_idx}
+
+ds = nc.Dataset(NC_FILE)
+var_data = ds.variables[VAR_NAME]
+if var_data.ndim == 4:
+    data_slice = var_data[TIME_IDX, LEVEL_IDX]
+elif var_data.ndim == 3:
+    data_slice = var_data[TIME_IDX]
+else:
+    data_slice = var_data[:]
+    
+data_slice = np.array(data_slice)
+
+try:
+    lats = np.array(ds.variables['XLAT'][0])
+    lons = np.array(ds.variables['XLONG'][0])
+except KeyError:
+    ny, nx = data_slice.shape
+    lons, lats = np.meshgrid(np.arange(nx), np.arange(ny))
+
+# Matplotlib Figure
+fig = plt.figure(figsize=(10, 6), facecolor="#1a1a2e")
+
+# Plot Mode: {self._mode}
+'''
+        if self._mode == MODE_CONTOUR:
+            py_code += f'''ax = fig.add_subplot(111)
+ax.set_facecolor("#0d0d1a")
+fig.patch.set_facecolor("#1a1a2e")
+ax.tick_params(colors="#aaa")
+
+# Contour Plot
+cf = ax.contourf(lons, lats, data_slice, levels=20, cmap="{self._cmap_combo.currentText()}", alpha={self._alpha}, extend="both")
+cs = ax.contour(lons, lats, data_slice, levels=10, colors="white", linewidths=0.4, alpha=0.6)
+ax.clabel(cs, inline=True, fontsize=6, fmt="%.1f", colors="white")
+cb = fig.colorbar(cf, ax=ax, pad=0.02, fraction=0.04)
+cb.set_label(f"{{VAR_NAME}}", color="#ccc")
+for lbl in cb.ax.get_yticklabels():
+    lbl.set_color("#aaa")
+'''
+        else:
+            py_code += f'''ax = fig.add_subplot(111, projection="3d")
+ax.set_facecolor("#0d0d1a")
+for pane in (ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane):
+    pane.fill = False
+    pane.set_edgecolor("#333")
+ax.tick_params(colors="#aaa")
+
+try:
+    terrain = np.array(ds.variables['HGT'][0])
+except KeyError:
+    terrain = np.zeros_like(data_slice)
+
+# Surface Plot
+norm = mcolors.Normalize(vmin=np.nanmin(data_slice), vmax=np.nanmax(data_slice))
+cmap = cm.get_cmap("{self._cmap_combo.currentText()}")
+colors = cmap(norm(data_slice))
+
+ax.plot_surface(lons, lats, terrain * {self._vert_exag}, facecolors=colors, shade=True, alpha={self._alpha}, linewidth=0, antialiased=True)
+
+# Formatting
+ax.set_box_aspect((1, 1, 0.4))
+sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+sm.set_array([])
+cb = fig.colorbar(sm, ax=ax, shrink=0.55, pad=0.08)
+cb.set_label(f"{{VAR_NAME}}", color="#ccc")
+for lbl in cb.ax.get_yticklabels():
+    lbl.set_color("#aaa")
+'''
+        
+        py_code += '''
+plt.show()
+'''
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(py_code)
+            
+        QMessageBox.information(self, 'Export', f'Python script saved successfully to:\\n{path}\\n\\nYou can run it in the QGIS Python Console.')
