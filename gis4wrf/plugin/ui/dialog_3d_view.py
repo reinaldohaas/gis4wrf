@@ -45,7 +45,8 @@ from PyQt5.QtWidgets import (
 try:
     from qgis.core import (
         QgsProject, QgsMapLayerType, QgsWkbTypes,
-        QgsCoordinateReferenceSystem, QgsCoordinateTransform
+        QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+        QgsRectangle, QgsFeatureRequest
     )
     HAS_QGIS = True
 except ImportError:

@@ -417,7 +417,17 @@ class Project(object):
                     var_patch = var_old[:patch_size]
                 nml_patch[group_name][var_name] = var_patch
 
-        patch_namelist(self.wrf_namelist_path, nml_patch)
+        iofields_path = os.path.join(self.path, 'iofields.txt')
+        delete_vars = []
+        if os.path.exists(iofields_path):
+            if 'time_control' not in nml_patch:
+                nml_patch['time_control'] = {}
+            nml_patch['time_control']['iofields_filename'] = "iofields.txt"
+            nml_patch['time_control']['ignore_iofields_warning'] = True
+        else:
+            delete_vars.extend(['iofields_filename', 'ignore_iofields_warning'])
+
+        patch_namelist(self.wrf_namelist_path, nml_patch, delete_vars=delete_vars)
 
     # TODO move prepare functions into separate module together with functions for running
     def prepare_wps_run(self, wps_folder: str) -> None:
@@ -506,6 +516,10 @@ class Project(object):
             link_or_copy(path, link_path)
         
         shutil.copy(self.wrf_namelist_path, self.run_wrf_folder)
+        
+        iofields_path = os.path.join(self.path, 'iofields.txt')
+        if os.path.exists(iofields_path):
+            shutil.copy(iofields_path, self.run_wrf_folder)
 
 def generate_gribfile_extensions():
     letters = list(string.ascii_uppercase)
