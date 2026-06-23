@@ -128,7 +128,7 @@ class VariablesWidget(QWidget):
         soil_vars = {"SMOIS", "SH2O", "TSLB", "TSK", "HFX", "LH"}
         rad_vars = {"RTHRATEN", "RTHRATLW", "RTHRATSW", "GLW", "SWDOWN"}
         pbl_vars = {"PBLH", "UST", "AKHS", "AKMS"}
-        static_vars = {"XLAT", "XLONG", "XLAT_U", "XLONG_U", "XLAT_V", "XLONG_V", "HGT", "LU_INDEX", "MAPFAC_M", "MAPFAC_U", "MAPFAC_V", "MAPFAC_MX", "MAPFAC_MY", "MAPFAC_UX", "MAPFAC_UY", "MAPFAC_VX", "MAPFAC_VY", "MF_VX_INV", "F", "E", "SINALPHA", "COSALPHA", "LANDMASK", "IVGTYP", "ISLTYP", "XLAND"}
+        static_vars = {"XLAT", "XLONG", "XLAT_U", "XLONG_U", "XLAT_V", "XLONG_V", "HGT", "LU_INDEX", "MAPFAC_M", "MAPFAC_U", "MAPFAC_V", "MAPFAC_MX", "MAPFAC_MY", "MAPFAC_UX", "MAPFAC_UY", "MAPFAC_VX", "MAPFAC_VY", "MF_VX_INV", "F", "E", "SINALPHA", "COSALPHA", "LANDMASK", "IVGTYP", "ISLTYP", "XLAND", "XLAT_M", "XLONG_M", "CLAT", "CLONG", "SINALPHA_U", "COSALPHA_U", "SINALPHA_V", "COSALPHA_V", "XLAT_C", "XLONG_C", "LANDUSEF", "SOILTEMP", "SOILCTOP", "SOILCBOT", "SCT_DOM", "SCB_DOM", "ALBEDO12M", "GREENFRAC", "LAI12M", "SNOALB", "CON", "VAR", "VAR_SSO", "OA1", "OA2", "OA3", "OA4", "OL1", "OL2", "OL3", "OL4", "EROD", "CLAYFRAC", "SANDFRAC", "URB_PARAM", "FRC_URB2D"}
         base_vars = {"PB", "PHB", "MUB", "ZNU", "ZNW", "ZS", "DZS", "FNX", "FNY", "FNP", "FNW"}
 
         rem_set = set(removed)
@@ -166,7 +166,7 @@ class VariablesWidget(QWidget):
         if self.chk_pbl.isChecked():
             removed.extend(["PBLH", "UST", "AKHS", "AKMS"])
         if self.chk_static.isChecked():
-            removed.extend(["XLAT", "XLONG", "XLAT_U", "XLONG_U", "XLAT_V", "XLONG_V", "HGT", "LU_INDEX", "MAPFAC_M", "MAPFAC_U", "MAPFAC_V", "MAPFAC_MX", "MAPFAC_MY", "MAPFAC_UX", "MAPFAC_UY", "MAPFAC_VX", "MAPFAC_VY", "MF_VX_INV", "F", "E", "SINALPHA", "COSALPHA", "LANDMASK", "IVGTYP", "ISLTYP", "XLAND"])
+            removed.extend(["XLAT", "XLONG", "XLAT_U", "XLONG_U", "XLAT_V", "XLONG_V", "HGT", "LU_INDEX", "MAPFAC_M", "MAPFAC_U", "MAPFAC_V", "MAPFAC_MX", "MAPFAC_MY", "MAPFAC_UX", "MAPFAC_UY", "MAPFAC_VX", "MAPFAC_VY", "MF_VX_INV", "F", "E", "SINALPHA", "COSALPHA", "LANDMASK", "IVGTYP", "ISLTYP", "XLAND", "XLAT_M", "XLONG_M", "CLAT", "CLONG", "SINALPHA_U", "COSALPHA_U", "SINALPHA_V", "COSALPHA_V", "XLAT_C", "XLONG_C", "LANDUSEF", "SOILTEMP", "SOILCTOP", "SOILCBOT", "SCT_DOM", "SCB_DOM", "ALBEDO12M", "GREENFRAC", "LAI12M", "SNOALB", "CON", "VAR", "VAR_SSO", "OA1", "OA2", "OA3", "OA4", "OL1", "OL2", "OL3", "OL4", "EROD", "CLAYFRAC", "SANDFRAC", "URB_PARAM", "FRC_URB2D"])
         if self.chk_base.isChecked():
             removed.extend(["PB", "PHB", "MUB", "ZNU", "ZNW", "ZS", "DZS", "FNX", "FNY", "FNP", "FNW"])
 

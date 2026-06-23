@@ -74,12 +74,13 @@ class MetToolsDownloadManager(QWidget):
         hbox_start_datetime.addWidget(QLabel('Start: '))
         hbox_start_datetime.addWidget(self.dedit_start_date)
 
-        hbox_end_datetime = QHBoxLayout()
-        vbox.addLayout(hbox_end_datetime)
-        self.dedit_end_date = QDateTimeEdit()
-        self.dedit_end_date.setCalendarPopup(True)
-        hbox_end_datetime.addWidget(QLabel('End: '))
-        hbox_end_datetime.addWidget(self.dedit_end_date)
+        hbox_hours = QHBoxLayout()
+        vbox.addLayout(hbox_hours)
+        self.spin_hours = QSpinBox()
+        self.spin_hours.setRange(1, 9999)
+        self.spin_hours.setValue(24)
+        hbox_hours.addWidget(QLabel('Hours to Run: '))
+        hbox_hours.addWidget(self.spin_hours)
 
         hbox_interval = QHBoxLayout()
         vbox.addLayout(hbox_interval)
@@ -199,7 +200,8 @@ class MetToolsDownloadManager(QWidget):
         dataset_name = self.cbox_dataset.currentData()
         product_name = self.cbox_product.currentData()
         start_date = self.dedit_start_date.dateTime().toPyDateTime()
-        end_date = self.dedit_end_date.dateTime().toPyDateTime()
+        from datetime import timedelta
+        end_date = start_date + timedelta(hours=self.spin_hours.value())
         if dataset_name is None or product_name is None:
             raise UserError('Dataset/Product not selected')
 
