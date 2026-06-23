@@ -21,9 +21,19 @@ class SmartConfigDialog(QDialog):
         self._generate_report()
         
     def _get_dx_km(self):
+        self.max_dom = 1
+        try:
+            wrf_nml = read_namelist(self.project.wrf_namelist_path, 'wrf')
+            self.max_dom = wrf_nml.get('domains', {}).get('max_dom', 1)
+        except:
+            pass
+
         try:
             nml = read_namelist(self.project.wps_namelist_path, 'wps')
             dx = nml['geogrid']['dx']
+            if isinstance(dx, list): dx = dx[0]
+            if self.max_dom == 1:
+                self.max_dom = nml.get('share', {}).get('max_dom', 1)
             return dx / 1000.0
         except:
             return 10.0 # Default fallback
@@ -83,34 +93,37 @@ class SmartConfigDialog(QDialog):
         # Physics
         self.patch = {'physics': {}, 'domains': {}}
         
+        def arr(val):
+            return [val] * self.max_dom
+        
         # Cumulus
         if self.dx_km < 3.0:
             report.append("- <b>Cumulus Physics:</b> Disabled (cu_physics=0).<br>  <i>Reason: Grid resolution is less than 3km (Convection Permitting).</i>")
-            self.patch['physics']['cu_physics'] = 0
+            self.patch['physics']['cu_physics'] = arr(0)
         else:
             report.append("- <b>Cumulus Physics:</b> Kain-Fritsch (cu_physics=1).<br>  <i>Reason: Grid resolution is >= 3km.</i>")
-            self.patch['physics']['cu_physics'] = 1
+            self.patch['physics']['cu_physics'] = arr(1)
             
         # Microphysics
         if season_idx == 1: # Summer
             report.append("- <b>Microphysics:</b> WSM6 (mp_physics=6).<br>  <i>Reason: Selected Summer/Storms, excellent for graupel and deep convection.</i>")
-            self.patch['physics']['mp_physics'] = 6
+            self.patch['physics']['mp_physics'] = arr(6)
         elif season_idx == 2: # Winter
             report.append("- <b>Microphysics:</b> Thompson (mp_physics=8).<br>  <i>Reason: Selected Winter/Snow, superior for mixed-phase ice and snow representation.</i>")
-            self.patch['physics']['mp_physics'] = 8
+            self.patch['physics']['mp_physics'] = arr(8)
         else:
             report.append("- <b>Microphysics:</b> WSM6 (mp_physics=6).<br>  <i>Reason: Good general-purpose microphysics scheme.</i>")
-            self.patch['physics']['mp_physics'] = 6
+            self.patch['physics']['mp_physics'] = arr(6)
             
         # Radiation
         report.append("- <b>Radiation:</b> RRTMG for Shortwave and Longwave (ra_sw_physics=4, ra_lw_physics=4).<br>  <i>Reason: Modern WRF standard for accuracy.</i>")
-        self.patch['physics']['ra_sw_physics'] = 4
-        self.patch['physics']['ra_lw_physics'] = 4
+        self.patch['physics']['ra_sw_physics'] = arr(4)
+        self.patch['physics']['ra_lw_physics'] = arr(4)
         
         # PBL
         report.append("- <b>PBL:</b> YSU Scheme (bl_pbl_physics=1, sf_sfclay_physics=1).<br>  <i>Reason: Robust boundary layer parametrization for most cases.</i>")
-        self.patch['physics']['bl_pbl_physics'] = 1
-        self.patch['physics']['sf_sfclay_physics'] = 1
+        self.patch['physics']['bl_pbl_physics'] = arr(1)
+        self.patch['physics']['sf_sfclay_physics'] = arr(1)
         
         # Time Step
         report.append(f"<br>- <b>Initial Time Step:</b> {self.suggested_dt}s.<br>  <i>Reason: Computed as 6 * dx ({self.dx_km:.2f}km).</i>")
