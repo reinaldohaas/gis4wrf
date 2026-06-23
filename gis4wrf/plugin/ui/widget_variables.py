@@ -33,11 +33,15 @@ class VariablesWidget(QWidget):
         self.chk_soil = QCheckBox("Soil & Surface (SMOIS, SH2O, TSLB, TSK, HFX, LH)")
         self.chk_rad = QCheckBox("Radiation & Clouds (RTHRATEN, RTHRATLW, RTHRATSW, GLW, SWDOWN)")
         self.chk_pbl = QCheckBox("PBL (PBLH, UST, AKHS, AKMS)")
+        self.chk_static = QCheckBox("Static Geo/Grid (XLAT, XLONG, HGT, MAPFAC_*, LU_INDEX, LANDMASK...)")
+        self.chk_base = QCheckBox("Base State / 1D (PB, PHB, MUB, ZNU, ZNW, ZS, DZS)")
 
         vbox_remove.addWidget(self.chk_micro)
         vbox_remove.addWidget(self.chk_soil)
         vbox_remove.addWidget(self.chk_rad)
         vbox_remove.addWidget(self.chk_pbl)
+        vbox_remove.addWidget(self.chk_static)
+        vbox_remove.addWidget(self.chk_base)
         layout.addWidget(group_remove)
 
         # Custom Individual Remove
@@ -75,6 +79,8 @@ class VariablesWidget(QWidget):
         self.chk_soil.toggled.connect(self._update_preview)
         self.chk_rad.toggled.connect(self._update_preview)
         self.chk_pbl.toggled.connect(self._update_preview)
+        self.chk_static.toggled.connect(self._update_preview)
+        self.chk_base.toggled.connect(self._update_preview)
         self.txt_custom_rm.textChanged.connect(self._update_preview)
         self.txt_custom_add.textChanged.connect(self._update_preview)
 
@@ -95,6 +101,8 @@ class VariablesWidget(QWidget):
         self.chk_soil.setChecked(False)
         self.chk_rad.setChecked(False)
         self.chk_pbl.setChecked(False)
+        self.chk_static.setChecked(False)
+        self.chk_base.setChecked(False)
         self.txt_custom_rm.setText("")
         self.txt_custom_add.setText("")
 
@@ -120,6 +128,8 @@ class VariablesWidget(QWidget):
         soil_vars = {"SMOIS", "SH2O", "TSLB", "TSK", "HFX", "LH"}
         rad_vars = {"RTHRATEN", "RTHRATLW", "RTHRATSW", "GLW", "SWDOWN"}
         pbl_vars = {"PBLH", "UST", "AKHS", "AKMS"}
+        static_vars = {"XLAT", "XLONG", "XLAT_U", "XLONG_U", "XLAT_V", "XLONG_V", "HGT", "LU_INDEX", "MAPFAC_M", "MAPFAC_U", "MAPFAC_V", "MAPFAC_MX", "MAPFAC_MY", "MAPFAC_UX", "MAPFAC_UY", "MAPFAC_VX", "MAPFAC_VY", "MF_VX_INV", "F", "E", "SINALPHA", "COSALPHA", "LANDMASK", "IVGTYP", "ISLTYP", "XLAND"}
+        base_vars = {"PB", "PHB", "MUB", "ZNU", "ZNW", "ZS", "DZS", "FNX", "FNY", "FNP", "FNW"}
 
         rem_set = set(removed)
         if micro_vars.issubset(rem_set):
@@ -134,8 +144,13 @@ class VariablesWidget(QWidget):
         if pbl_vars.issubset(rem_set):
             self.chk_pbl.setChecked(True)
             rem_set -= pbl_vars
+        if static_vars.issubset(rem_set):
+            self.chk_static.setChecked(True)
+            rem_set -= static_vars
+        if base_vars.issubset(rem_set):
+            self.chk_base.setChecked(True)
+            rem_set -= base_vars
 
-        self.txt_custom_rm.setText(", ".join(sorted(list(rem_set))))
         self.txt_custom_rm.setText(", ".join(sorted(list(rem_set))))
         self.txt_custom_add.setText(", ".join(sorted(list(set(added)))))
         self._update_preview()
@@ -150,6 +165,10 @@ class VariablesWidget(QWidget):
             removed.extend(["RTHRATEN", "RTHRATLW", "RTHRATSW", "GLW", "SWDOWN"])
         if self.chk_pbl.isChecked():
             removed.extend(["PBLH", "UST", "AKHS", "AKMS"])
+        if self.chk_static.isChecked():
+            removed.extend(["XLAT", "XLONG", "XLAT_U", "XLONG_U", "XLAT_V", "XLONG_V", "HGT", "LU_INDEX", "MAPFAC_M", "MAPFAC_U", "MAPFAC_V", "MAPFAC_MX", "MAPFAC_MY", "MAPFAC_UX", "MAPFAC_UY", "MAPFAC_VX", "MAPFAC_VY", "MF_VX_INV", "F", "E", "SINALPHA", "COSALPHA", "LANDMASK", "IVGTYP", "ISLTYP", "XLAND"])
+        if self.chk_base.isChecked():
+            removed.extend(["PB", "PHB", "MUB", "ZNU", "ZNW", "ZS", "DZS", "FNX", "FNY", "FNP", "FNW"])
 
         custom_rm = [v.strip() for v in self.txt_custom_rm.text().split(',') if v.strip()]
         if custom_rm:
