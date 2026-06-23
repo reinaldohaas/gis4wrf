@@ -179,15 +179,13 @@ class MetToolsDownloadManager(QWidget):
         date_min = min(dates)
         date_max = max(dates)
 
-        for dt_input in [self.dedit_start_date, self.dedit_end_date]:
+        for dt_input in [self.dedit_start_date]:
             dt_input.setDateTimeRange(
                 QDateTime(QDate(date_min.year, date_min.month, date_min.day), QTime(date_min.hour, date_min.minute)),
                 QDateTime(QDate(date_max.year, date_max.month, date_max.day), QTime(date_max.hour, date_max.minute)))
 
         min_dt = self.dedit_start_date.minimumDateTime()
-        max_dt = self.dedit_start_date.maximumDateTime()
         self.dedit_start_date.setDateTime(min_dt)
-        self.dedit_end_date.setDateTime(max_dt)
 
     def on_download_button_clicked(self):
         param_names = []
