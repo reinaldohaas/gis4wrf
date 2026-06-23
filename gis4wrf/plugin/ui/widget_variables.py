@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
-    QCheckBox, QLabel, QLineEdit, QPushButton, QMessageBox, QScrollArea
+    QCheckBox, QLabel, QLineEdit, QPushButton, QMessageBox, QScrollArea, QTextEdit
 )
 from PyQt5.QtCore import Qt
 import os
@@ -58,6 +58,23 @@ class VariablesWidget(QWidget):
         btn_save = QPushButton("Save Variables Configuration")
         btn_save.clicked.connect(self._on_save)
         layout.addWidget(btn_save)
+
+        # Preview Section
+        group_preview = QGroupBox("Configuration Preview (iofields.txt)")
+        vbox_preview = QVBoxLayout(group_preview)
+        self.txt_preview = QTextEdit()
+        self.txt_preview.setReadOnly(True)
+        self.txt_preview.setStyleSheet("background-color: #f0f0f0; color: #333; font-family: monospace;")
+        vbox_preview.addWidget(self.txt_preview)
+        layout.addWidget(group_preview)
+
+        # Connect signals for live preview
+        self.chk_micro.toggled.connect(self._update_preview)
+        self.chk_soil.toggled.connect(self._update_preview)
+        self.chk_rad.toggled.connect(self._update_preview)
+        self.chk_pbl.toggled.connect(self._update_preview)
+        self.txt_custom_rm.textChanged.connect(self._update_preview)
+        self.txt_custom_add.textChanged.connect(self._update_preview)
 
         layout.addStretch()
 
@@ -117,13 +134,11 @@ class VariablesWidget(QWidget):
             rem_set -= pbl_vars
 
         self.txt_custom_rm.setText(", ".join(sorted(list(rem_set))))
+        self.txt_custom_rm.setText(", ".join(sorted(list(rem_set))))
         self.txt_custom_add.setText(", ".join(sorted(list(set(added)))))
+        self._update_preview()
 
-    def _on_save(self):
-        if not self.project or not self.project.path:
-            QMessageBox.warning(self, "Error", "No active project. Please create or open a project first.")
-            return
-
+    def _generate_iofields_lines(self):
         removed = []
         if self.chk_micro.isChecked():
             removed.extend(["QCLOUD", "QRAIN", "QICE", "QSNOW", "QGRAUPEL", "QVAPOR"])
@@ -135,7 +150,8 @@ class VariablesWidget(QWidget):
             removed.extend(["PBLH", "UST", "AKHS", "AKMS"])
 
         custom_rm = [v.strip() for v in self.txt_custom_rm.text().split(',') if v.strip()]
-        removed.extend(custom_rm)
+        if custom_rm:
+            removed.extend(custom_rm)
         
         custom_add = [v.strip() for v in self.txt_custom_add.text().split(',') if v.strip()]
 
@@ -156,7 +172,21 @@ class VariablesWidget(QWidget):
             custom_add = [x for x in custom_add if not (x in seen or seen.add(x))]
             for chunk in chunker(custom_add, 15):
                 lines.append("+:h:0:" + ",".join(chunk))
+        return lines
 
+    def _update_preview(self):
+        lines = self._generate_iofields_lines()
+        if not lines:
+            self.txt_preview.setText("(No configuration. Default WRF output will be used.)")
+        else:
+            self.txt_preview.setText("\\n".join(lines))
+
+    def _on_save(self):
+        if not self.project or not self.project.path:
+            QMessageBox.warning(self, "Error", "No active project. Please create or open a project first.")
+            return
+
+        lines = self._generate_iofields_lines()
         iofields_path = os.path.join(self.project.path, 'iofields.txt')
         
         if not lines:
