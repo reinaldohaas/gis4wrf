@@ -28,6 +28,7 @@ from gis4wrf.plugin.options import get_options
 from gis4wrf.plugin.ui.helpers import MessageBar
 from gis4wrf.plugin.ui.thread import ProgramThread
 from gis4wrf.plugin.ui.dialog_nml_editor import NmlEditorDialog
+from gis4wrf.plugin.ui.dialog_smart_config import SmartConfigDialog
 
 class RunWidget(QWidget):
     tab_active = pyqtSignal()
@@ -48,9 +49,10 @@ class RunWidget(QWidget):
                 ['Run Geogrid', 'Run Ungrib', 'Run Metgrid'],
                 'Visualize Output'
             ])
-        self.wrf_box, [open_namelist_wrf, prepare_only_wrf, run_real, run_wrf, open_output_wrf] = \
+        self.wrf_box, [open_namelist_wrf, smart_config_wrf, prepare_only_wrf, run_real, run_wrf, open_output_wrf] = \
             self.create_gbox_with_btns('WRF', [
                 'Open Configuration',
+                'Smart Configuration Wizard 🧙‍♂️',
                 'Prepare only',
                 ['Run Real', 'Run WRF'],
                 'Visualize Output'
@@ -78,6 +80,7 @@ class RunWidget(QWidget):
         open_output_wps.clicked.connect(self.on_open_output_wps_clicked)
 
         open_namelist_wrf.clicked.connect(self.on_open_namelist_wrf_clicked)
+        smart_config_wrf.clicked.connect(self.on_smart_config_wrf_clicked)
         prepare_only_wrf.clicked.connect(self.on_prepare_only_wrf_clicked)
         run_real.clicked.connect(self.on_run_real_clicked)
         run_wrf.clicked.connect(self.on_run_wrf_clicked)
@@ -116,6 +119,10 @@ class RunWidget(QWidget):
         self.project.update_wrf_namelist()
         self.open_editor_dialog(self.project.wrf_namelist_path,
                                 get_namelist_schema('wrf'))
+
+    def on_smart_config_wrf_clicked(self) -> None:
+        dialog = SmartConfigDialog(self.project, self)
+        dialog.exec_()
 
     def on_prepare_only_wps_clicked(self) -> None:
         self.prepare_wps_run()
