@@ -239,7 +239,7 @@ class ViewWidget(QWidget):
         except Exception:
             return
         layers = plugin_geo.get_raster_layers_in_group(dataset.name)
-        from qgis.core import QgsBilinearRasterResampler
+        from qgis.core import QgsBilinearRasterResampler, QgsNearestNeighborhoodRasterResampler
         for layer in layers:
             resampler_filter = layer.resampleFilter()
             if resampler_filter:
@@ -247,8 +247,8 @@ class ViewWidget(QWidget):
                     resampler_filter.setZoomedInResampler(QgsBilinearRasterResampler())
                     resampler_filter.setZoomedOutResampler(QgsBilinearRasterResampler())
                 else:
-                    resampler_filter.setZoomedInResampler(None)
-                    resampler_filter.setZoomedOutResampler(None)
+                    resampler_filter.setZoomedInResampler(QgsNearestNeighborhoodRasterResampler())
+                    resampler_filter.setZoomedOutResampler(QgsNearestNeighborhoodRasterResampler())
             layer.triggerRepaint()
 
     def on_add_contours(self) -> None:
@@ -293,7 +293,8 @@ class ViewWidget(QWidget):
             var_name = layer.shortName() or 'var'
             vlayer = QgsVectorLayer(tmp, f'{var_name} contours', 'ogr')
             if vlayer.isValid():
-                QgsProject.instance().addMapLayer(vlayer)
+                QgsProject.instance().addMapLayer(vlayer, False)
+                QgsProject.instance().layerTreeRoot().insertLayer(0, vlayer)
             else:
                 raise RuntimeError('Contour layer is not valid')
         except Exception as exc:
@@ -301,22 +302,20 @@ class ViewWidget(QWidget):
             QMessageBox.warning(self, 'Contours', f'Error generating contours:\n{exc}')
 
     def on_wind_overlay(self) -> None:
-        """Open a matplotlib popup showing wind barbs / quivers overlaid on the variable."""
+        """Create a native QGIS vector layer showing wind vectors."""
         try:
             dataset  = self.get_dataset()
-            variable = self.get_variable()
         except Exception:
             return
+        layers = plugin_geo.get_raster_layers_in_group(dataset.name)
+        if not layers:
+            return
+        layer = layers[0]
         try:
-            import matplotlib
-            matplotlib.use('Qt5Agg')
-            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-            from matplotlib.figure import Figure
             from netCDF4 import Dataset as NC4Dataset
             import numpy as np
 
             with NC4Dataset(dataset.path) as ds:
-                # Find U/V wind
                 for uname, vname in [('U10', 'V10'), ('U', 'V')]:
                     u_var = ds.variables.get(uname)
                     v_var = ds.variables.get(vname)
@@ -324,8 +323,7 @@ class ViewWidget(QWidget):
                         break
                 else:
                     from PyQt5.QtWidgets import QMessageBox
-                    QMessageBox.information(self, 'Wind overlay',
-                        'U10/V10 or U/V not found in this file.')
+                    QMessageBox.information(self, 'Wind overlay', 'U10/V10 or U/V not found in this file.')
                     return
 
                 t = self.get_time_index()
@@ -334,47 +332,75 @@ class ViewWidget(QWidget):
                     lev = self.get_extra_dim_index() or 0
                     u = u[lev]; v = v[lev]
 
-                xlat  = ds.variables.get('XLAT')
-                xlong = ds.variables.get('XLONG')
-                lats  = np.squeeze(xlat[0])  if xlat  is not None else None
-                lons  = np.squeeze(xlong[0]) if xlong is not None else None
+            # Fetch geographic bounds and resolution from the current raster layer
+            extent = layer.extent()
+            width = layer.width()
+            height = layer.height()
+            x_min, x_max = extent.xMinimum(), extent.xMaximum()
+            y_min, y_max = extent.yMinimum(), extent.yMaximum()
+            dx = (x_max - x_min) / width
+            dy = (y_max - y_min) / height
 
             ny, nx = u.shape[0], u.shape[1]
-            step = max(1, min(ny, nx) // 18)
-            u_s  = u[::step, :nx:step];  v_s = v[:ny:step, ::step]
-            if lons is not None:
-                lo_s = lons[::step, ::step]; la_s = lats[::step, ::step]
-            else:
-                lo_s, la_s = (np.arange(nx)[::step][np.newaxis, :] * np.ones((len(range(0, ny, step)), 1)),
-                              np.arange(ny)[::step][:, np.newaxis] * np.ones((1, len(range(0, nx, step)))))
-            # Clip to same shape
-            n = min(lo_s.shape[0], u_s.shape[0], v_s.shape[0])
-            m = min(lo_s.shape[1], u_s.shape[1], v_s.shape[1])
-            lo_s, la_s, u_s, v_s = lo_s[:n, :m], la_s[:n, :m], u_s[:n, :m], v_s[:n, :m]
-            spd = np.hypot(u_s, v_s)
+            step = max(1, min(ny, nx) // 25)
 
-            from PyQt5.QtWidgets import QDialog, QVBoxLayout
-            dlg = QDialog(self)
-            dlg.setWindowTitle(f'Wind overlay — {dataset.name}')
-            dlg.resize(800, 600)
-            fig = Figure(facecolor='#1a1a2e', tight_layout=True)
-            canvas = FigureCanvasQTAgg(fig)
-            ax = fig.add_subplot(111)
-            ax.set_facecolor('#0d0d1a')
-            ax.tick_params(colors='#aaa')
-            t_str = dataset.times[t] if dataset.times else ''
-            ax.set_title(f'Wind — {uname}/{vname}  {t_str}', color='white')
-            q = ax.quiver(lo_s, la_s, u_s, v_s, spd,
-                          cmap='plasma', scale=None, width=0.003)
-            cb = fig.colorbar(q, ax=ax, pad=0.02, fraction=0.04)
-            cb.set_label('Wind speed (m/s)', color='#ccc')
-            for lbl in cb.ax.get_yticklabels():
-                lbl.set_color('#aaa')
-            ax.set_xlabel('Longitude' if lons is not None else 'X', color='#ccc')
-            ax.set_ylabel('Latitude'  if lons is not None else 'Y', color='#ccc')
-            lay = QVBoxLayout(dlg)
-            lay.addWidget(canvas)
-            dlg.show()
+            from qgis.core import (
+                QgsVectorLayer, QgsFeature, QgsGeometry, QgsPointXY, QgsProject,
+                QgsLineSymbol, QgsSingleSymbolRenderer, QgsMarkerLineSymbolLayer,
+                QgsSimpleMarkerSymbolLayer
+            )
+
+            vlayer = QgsVectorLayer(f"LineString?crs={layer.crs().authid()}&field=spd:double", f"Wind {uname}/{vname}", "memory")
+            provider = vlayer.dataProvider()
+
+            features = []
+            max_spd = 0.001
+            for j in range(0, min(ny, height), step):
+                for i in range(0, min(nx, width), step):
+                    u_val = float(u[j, i])
+                    v_val = float(v[j, i])
+                    if np.isnan(u_val) or np.isnan(v_val):
+                        continue
+                    spd = np.hypot(u_val, v_val)
+                    if spd > max_spd: max_spd = spd
+                    
+                    # Compute native map coordinates
+                    px = x_min + i * dx + dx/2
+                    py = y_max - j * dy - dy/2 # Note: Y goes down
+                    
+                    # Length scaled to fit within step size roughly
+                    scale = (dx * step * 0.8) / 20.0 # arbitrary scaling factor
+                    end_px = px + u_val * scale
+                    end_py = py + v_val * scale
+
+                    geom = QgsGeometry.fromPolylineXY([QgsPointXY(px, py), QgsPointXY(end_px, end_py)])
+                    feat = QgsFeature()
+                    feat.setGeometry(geom)
+                    feat.setAttributes([spd])
+                    features.append(feat)
+
+            provider.addFeatures(features)
+            vlayer.updateExtents()
+
+            # Create an arrow symbol
+            sym = QgsLineSymbol.createSimple({'line_color': 'black', 'line_width': '0.3'})
+            
+            # Add an arrowhead at the end
+            marker_layer = QgsMarkerLineSymbolLayer()
+            marker_layer.setPlacement(QgsMarkerLineSymbolLayer.LastVertex)
+            arrow_marker = QgsSimpleMarkerSymbolLayer()
+            arrow_marker.setShape(QgsSimpleMarkerSymbolLayer.ArrowHead)
+            arrow_marker.setSize(2.0)
+            arrow_marker.setColor(QColor('black'))
+            arrow_marker.setStrokeColor(QColor('black'))
+            marker_layer.setSubSymbol(arrow_marker.clone())
+            
+            sym.appendSymbolLayer(marker_layer)
+
+            vlayer.setRenderer(QgsSingleSymbolRenderer(sym))
+            QgsProject.instance().addMapLayer(vlayer, False)
+            QgsProject.instance().layerTreeRoot().insertLayer(0, vlayer)
+
         except Exception as exc:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, 'Wind overlay', f'Error:\n{exc}')
