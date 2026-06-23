@@ -2,10 +2,12 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
     QCheckBox, QLabel, QLineEdit, QPushButton, QMessageBox, QScrollArea, QTextEdit
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 import os
 
 class VariablesWidget(QWidget):
+    tab_active = pyqtSignal()
+
     def __init__(self, iface):
         super().__init__()
         self.iface = iface
