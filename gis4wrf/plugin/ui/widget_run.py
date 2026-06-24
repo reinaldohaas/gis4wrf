@@ -55,7 +55,7 @@ class RunWidget(QWidget):
                 'Smart Configuration Wizard 🧙‍♂️',
                 'Prepare only',
                 ['Run Real', 'Run WRF'],
-                'Export Run Dir to ZIP 📦',
+                'Export Project to ZIP 📦',
                 'Visualize Output'
             ])
         self.control_box, [kill_program] = self.create_gbox_with_btns('Program control', [
@@ -182,27 +182,40 @@ class RunWidget(QWidget):
         self.view_wrf_nc_file.emit(path)
 
     def on_export_wrf_clicked(self) -> None:
-        if not os.path.exists(self.project.run_wrf_folder):
-            QMessageBox.warning(self, 'Export Error', 'The WRF run folder does not exist. Please run "Prepare only" first.')
-            return
-            
         path, _ = QFileDialog.getSaveFileName(
-            self, 'Export WRF Run Directory to ZIP', 
-            os.path.join(self.project.path, 'wrf_export.zip'),
+            self, 'Export Project to ZIP (Configuration & Data only)', 
+            os.path.join(self.project.path, 'project_export.zip'),
             'ZIP archives (*.zip)'
         )
         if not path:
             return
             
-        import shutil
-        base_name = path
-        if base_name.lower().endswith('.zip'):
-            base_name = base_name[:-4]
-            
-        self.msg_bar.info('Zipping WRF run directory, please wait...')
+        import zipfile
+        self.msg_bar.info('Zipping project directory, please wait...')
         try:
-            shutil.make_archive(base_name, 'zip', self.project.run_wrf_folder)
-            self.msg_bar.success(f'WRF run directory exported to:\n{path}')
+            with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, dirs, files in os.walk(self.project.path):
+                    # Exclude generated run folders to save space
+                    if 'run_wrf' in dirs:
+                        dirs.remove('run_wrf')
+                    if 'run_wps' in dirs:
+                        dirs.remove('run_wps')
+                        
+                    for file in files:
+                        abs_file = os.path.join(root, file)
+                        # Exclude the zip itself if saved inside project
+                        if os.path.abspath(abs_file) == os.path.abspath(path):
+                            continue
+                            
+                        # Exclude any stray WRF/WPS generated files
+                        if file.startswith(('wrfout', 'wrfrst', 'wrfbdy', 'wrfinput', 'geo_em', 'met_em', 'GRIBFILE')):
+                            continue
+                            
+                        rel_dir = os.path.relpath(root, self.project.path)
+                        rel_file = os.path.join(rel_dir, file) if rel_dir != '.' else file
+                        zipf.write(abs_file, rel_file)
+                        
+            self.msg_bar.success(f'Project exported successfully to:\n{path}')
         except Exception as exc:
             QMessageBox.critical(self, 'Export Error', f'Failed to create zip archive:\n{exc}')
 
