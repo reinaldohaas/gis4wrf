@@ -422,7 +422,7 @@ class Project(object):
         if os.path.exists(iofields_path):
             if 'time_control' not in nml_patch:
                 nml_patch['time_control'] = {}
-            nml_patch['time_control']['iofields_filename'] = "iofields.txt"
+            nml_patch['time_control']['iofields_filename'] = ["iofields.txt"] * self.domain_count
             nml_patch['time_control']['ignore_iofields_warning'] = True
         else:
             delete_vars.extend(['iofields_filename', 'ignore_iofields_warning'])

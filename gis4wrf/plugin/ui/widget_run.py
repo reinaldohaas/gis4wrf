@@ -49,12 +49,13 @@ class RunWidget(QWidget):
                 ['Run Geogrid', 'Run Ungrib', 'Run Metgrid'],
                 'Visualize Output'
             ])
-        self.wrf_box, [open_namelist_wrf, smart_config_wrf, prepare_only_wrf, run_real, run_wrf, open_output_wrf] = \
+        self.wrf_box, [open_namelist_wrf, smart_config_wrf, prepare_only_wrf, run_real, run_wrf, export_wrf, open_output_wrf] = \
             self.create_gbox_with_btns('WRF', [
                 'Open Configuration',
                 'Smart Configuration Wizard 🧙‍♂️',
                 'Prepare only',
                 ['Run Real', 'Run WRF'],
+                'Export Run Dir to ZIP 📦',
                 'Visualize Output'
             ])
         self.control_box, [kill_program] = self.create_gbox_with_btns('Program control', [
@@ -84,6 +85,7 @@ class RunWidget(QWidget):
         prepare_only_wrf.clicked.connect(self.on_prepare_only_wrf_clicked)
         run_real.clicked.connect(self.on_run_real_clicked)
         run_wrf.clicked.connect(self.on_run_wrf_clicked)
+        export_wrf.clicked.connect(self.on_export_wrf_clicked)
         open_output_wrf.clicked.connect(self.on_open_output_wrf_clicked)
 
         kill_program.clicked.connect(self.on_kill_program_clicked)
@@ -178,6 +180,31 @@ class RunWidget(QWidget):
         if not path:
             return
         self.view_wrf_nc_file.emit(path)
+
+    def on_export_wrf_clicked(self) -> None:
+        if not os.path.exists(self.project.run_wrf_folder):
+            QMessageBox.warning(self, 'Export Error', 'The WRF run folder does not exist. Please run "Prepare only" first.')
+            return
+            
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Export WRF Run Directory to ZIP', 
+            os.path.join(self.project.path, 'wrf_export.zip'),
+            'ZIP archives (*.zip)'
+        )
+        if not path:
+            return
+            
+        import shutil
+        base_name = path
+        if base_name.lower().endswith('.zip'):
+            base_name = base_name[:-4]
+            
+        self.msg_bar.info('Zipping WRF run directory, please wait...')
+        try:
+            shutil.make_archive(base_name, 'zip', self.project.run_wrf_folder)
+            self.msg_bar.success(f'WRF run directory exported to:\n{path}')
+        except Exception as exc:
+            QMessageBox.critical(self, 'Export Error', f'Failed to create zip archive:\n{exc}')
 
     def on_kill_program_clicked(self) -> None:
         self.dont_report_program_status = True

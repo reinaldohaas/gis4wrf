@@ -239,7 +239,7 @@ class ViewWidget(QWidget):
         except Exception:
             return
         layers = plugin_geo.get_raster_layers_in_group(dataset.name)
-        from qgis.core import QgsBilinearRasterResampler, QgsNearestNeighborhoodRasterResampler
+        from qgis.core import QgsBilinearRasterResampler
         for layer in layers:
             resampler_filter = layer.resampleFilter()
             if resampler_filter:
@@ -247,8 +247,9 @@ class ViewWidget(QWidget):
                     resampler_filter.setZoomedInResampler(QgsBilinearRasterResampler())
                     resampler_filter.setZoomedOutResampler(QgsBilinearRasterResampler())
                 else:
-                    resampler_filter.setZoomedInResampler(QgsNearestNeighborhoodRasterResampler())
-                    resampler_filter.setZoomedOutResampler(QgsNearestNeighborhoodRasterResampler())
+                    resampler_filter.setZoomedInResampler(None)
+                    resampler_filter.setZoomedOutResampler(None)
+            layer.dataProvider().reloadData()
             layer.triggerRepaint()
 
     def on_add_contours(self) -> None:
