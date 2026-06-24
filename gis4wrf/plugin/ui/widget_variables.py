@@ -200,7 +200,7 @@ class VariablesWidget(QWidget):
         if not lines:
             self.txt_preview.setText("(No configuration. Default WRF output will be used.)")
         else:
-            self.txt_preview.setText("\\n".join(lines))
+            self.txt_preview.setText("\n".join(lines))
 
     def _on_save(self):
         if not self.project or not self.project.path:
@@ -209,12 +209,24 @@ class VariablesWidget(QWidget):
 
         lines = self._generate_iofields_lines()
         iofields_path = os.path.join(self.project.path, 'iofields.txt')
+        run_wrf_path = os.path.join(self.project.path, 'run_wrf', 'iofields.txt')
         
-        if not lines:
-            if os.path.exists(iofields_path):
-                os.remove(iofields_path)
-            QMessageBox.information(self, "Variables", "Configuration cleared. Default WRF output will be used.")
-        else:
-            with open(iofields_path, 'w') as f:
-                f.write("\\n".join(lines) + "\\n")
-            QMessageBox.information(self, "Variables", "Variables configuration saved successfully!\\niofields.txt updated.")
+        try:
+            if not lines:
+                if os.path.exists(iofields_path):
+                    os.remove(iofields_path)
+                if os.path.exists(run_wrf_path):
+                    os.remove(run_wrf_path)
+            else:
+                with open(iofields_path, 'w') as f:
+                    f.write("\n".join(lines) + "\n")
+                
+                # Update run_wrf immediately so WRF can see it without re-preparing
+                if os.path.exists(os.path.join(self.project.path, 'run_wrf')):
+                    import shutil
+                    shutil.copy(iofields_path, run_wrf_path)
+                    
+            self._update_preview()
+            QMessageBox.information(self, "Variables", "Variables configuration saved successfully!\niofields.txt updated.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save iofields.txt: {e}")
