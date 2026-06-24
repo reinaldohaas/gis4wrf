@@ -251,6 +251,7 @@ class ViewWidget(QWidget):
                     resampler_filter.setZoomedOutResampler(None)
             layer.dataProvider().reloadData()
             layer.triggerRepaint()
+        self.iface.mapCanvas().refresh()
 
     def on_add_contours(self) -> None:
         """Generate a contour vector layer from the current raster and add to QGIS."""
