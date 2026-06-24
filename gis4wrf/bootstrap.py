@@ -168,7 +168,6 @@ def bootstrap() -> Iterable[Tuple[str,Any]]:
     if DID_BOOTSTRAP:
         return
     DID_BOOTSTRAP = True
-    return
 
     # Add custom folder to search path.
     for path in site.getsitepackages(prefixes=[INSTALL_PREFIX]):
@@ -190,7 +189,11 @@ def bootstrap() -> Iterable[Tuple[str,Any]]:
 
         site.addsitedir(path)
         # pkg_resources doesn't listen to changes on sys.path.
-        pkg_resources.working_set.add_entry(path)
+        try:
+            import pkg_resources
+            pkg_resources.working_set.add_entry(path)
+        except ImportError:
+            pass
 
     # pip tries to install packages even if they are installed already in the
     # custom folder. To avoid that, we do the check ourselves.
@@ -199,32 +202,46 @@ def bootstrap() -> Iterable[Tuple[str,Any]]:
     installed = []
     needs_install = []
     cannot_update = []
+    
+    try:
+        import pkg_resources
+        HAS_PKG_RESOURCES = True
+    except ImportError:
+        HAS_PKG_RESOURCES = False
+        import importlib.metadata
+        
     for dep in DEPS:
         try:
-            # Will raise DistributionNotFound if not found.
-            location = pkg_resources.get_distribution(dep.name).location
+            if HAS_PKG_RESOURCES:
+                dist = pkg_resources.get_distribution(dep.name)
+                location = dist.location
+                version = dist.version
+            else:
+                dist = importlib.metadata.distribution(dep.name)
+                # Some Python versions return paths, some return objects from locate_file
+                location = str(dist.locate_file(''))
+                version = dist.version
+
             is_local = Path(INSTALL_PREFIX) in Path(location).parents
 
             if not dep.min:
                 installed.append((dep, is_local))
             else:
-                # There is a minimum version constraint, check that.
-                try:
-                    # Will raise VersionConflict on version mismatch.
-                    pkg_resources.get_distribution('{}>={}'.format(dep.name, dep.min))
+                if HAS_PKG_RESOURCES:
+                    try:
+                        pkg_resources.get_distribution('{}>={}'.format(dep.name, dep.min))
+                        installed.append((dep, is_local))
+                    except pkg_resources.VersionConflict as exc:
+                        if is_local:
+                            needs_install.append(dep)
+                        else:
+                            cannot_update.append((dep, exc.dist.version))
+                            installed.append((dep, False))
+                else:
+                    # GIS4WRF currently does not use dep.min, so fallback to assume it's valid
                     installed.append((dep, is_local))
-                except pkg_resources.VersionConflict as exc:
-                    # Re-install is only possible if the previous version was installed by us.
-                    if is_local:
-                        needs_install.append(dep)
-                    else:
-                        # Continue without re-installing this package and hope for the best.
-                        # cannot_update is populated which can later be used to notify the user
-                        # that a newer version is required and has to be manually updated.
-                        cannot_update.append((dep, exc.dist.version))
-                        installed.append((dep, False))
 
-        except pkg_resources.DistributionNotFound as exc:
+        except Exception:
             needs_install.append(dep)
 
     if needs_install:
