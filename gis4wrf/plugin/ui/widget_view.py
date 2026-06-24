@@ -246,6 +246,7 @@ class ViewWidget(QWidget):
                 if checked:
                     resampler_filter.setZoomedInResampler(QgsBilinearRasterResampler())
                     resampler_filter.setZoomedOutResampler(QgsBilinearRasterResampler())
+                    resampler_filter.setMaxOversampling(0.0) # Unlimited oversampling so it stays smooth when deeply zoomed in
                 else:
                     resampler_filter.setZoomedInResampler(None)
                     resampler_filter.setZoomedOutResampler(None)
