@@ -333,6 +333,32 @@ class ExportBundleDialog(QDialog):
         except Exception:
             return None, [], []
 
+    # Picks mpirun/mpiexec when available and falls back to a plain serial run,
+    # which is what a JupyterHub container or a serial WPS/WRF build needs.
+    LAUNCHER_SNIPPET = '''\
+            # MPI launcher: mpirun/mpiexec when available, serial otherwise.
+            LAUNCH=()
+            if [ "$NP" -gt 1 ]; then
+              if command -v mpirun >/dev/null 2>&1; then
+                LAUNCH=(mpirun -np "$NP")
+              elif command -v mpiexec >/dev/null 2>&1; then
+                LAUNCH=(mpiexec -n "$NP")
+              else
+                echo "WARNING: neither mpirun nor mpiexec found; running serially." >&2
+                echo "         A dmpar build may still fail here - use a serial build" >&2
+                echo "         or load the MPI module before running this script." >&2
+              fi
+            fi
+            run_exe() {  # run_exe <path to exe>
+              local exe="$1"
+              if [ "${#LAUNCH[@]}" -gt 0 ]; then
+                "${LAUNCH[@]}" "$exe"
+              else
+                "$exe"
+              fi
+            }
+'''
+
     def _script_wps(self) -> str:
         ''' Mirrors Project.prepare_wps_run, then runs ungrib and metgrid. '''
         return textwrap.dedent('''\
@@ -346,6 +372,8 @@ class ExportBundleDialog(QDialog):
             RUN="$PROJ/run_wps"
             : "${{WPS_DIR:?set WPS_DIR=/path/to/WPS}}"
             NP="${{NP:-8}}"
+
+''' + self.LAUNCHER_SNIPPET.replace('{', '{{').replace('}', '}}') + '''
 
             mkdir -p "$RUN/geogrid" "$RUN/metgrid"
             cp -f "$PROJ/namelist.wps" "$RUN/namelist.wps"
@@ -368,11 +396,11 @@ class ExportBundleDialog(QDialog):
               i=$(( i + 1 ))
             done
 
-            echo "== ungrib (serial) =="
+            echo "== ungrib (always serial) =="
             "$WPS_DIR/ungrib.exe"
 
-            echo "== metgrid (np=$NP) =="
-            mpirun -np "$NP" "$WPS_DIR/metgrid.exe"
+            echo "== metgrid =="
+            run_exe "$WPS_DIR/metgrid.exe"
 
             echo "met_em files written to $RUN"
             ''').format(name=self.project_name)
@@ -390,6 +418,7 @@ class ExportBundleDialog(QDialog):
             : "${{WRF_DIR:?set WRF_DIR=/path/to/WRF}}"
             NP="${{NP:-64}}"
 
+''' + self.LAUNCHER_SNIPPET.replace('{', '{{').replace('}', '}}') + '''
             mkdir -p "$RUN"
 
             # Static data and tables from the WRF build (run/ on a source build,
@@ -417,13 +446,13 @@ class ExportBundleDialog(QDialog):
             ln -sf "${{met_em[@]}}" "$RUN"/
 
             cd "$RUN"
-            echo "== real.exe (np=$NP) =="
-            mpirun -np "$NP" "$WRF_DIR/main/real.exe"
+            echo "== real.exe =="
+            run_exe "$WRF_DIR/main/real.exe"
             grep -q "SUCCESS COMPLETE REAL_EM INIT" rsl.error.0000 rsl.out.0000 2>/dev/null \\
               || {{ echo "real.exe failed, check $RUN/rsl.error.*" >&2; exit 1; }}
 
-            echo "== wrf.exe (np=$NP) =="
-            mpirun -np "$NP" "$WRF_DIR/main/wrf.exe"
+            echo "== wrf.exe =="
+            run_exe "$WRF_DIR/main/wrf.exe"
             echo "wrfout files in $RUN"
             ''').format(name=self.project_name)
 
