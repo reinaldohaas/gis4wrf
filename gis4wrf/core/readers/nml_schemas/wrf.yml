@@ -543,6 +543,21 @@ domains:
     itemtype: int
     minlen: max_dom
     example: 30
+  dzstretch_s:
+    description: Since 4.0. Stretching factor applied to the lower levels when the
+      vertical levels are generated automatically (eta_levels not given).
+    type: real
+    example: 1.3
+  dzstretch_u:
+    description: Since 4.0. Stretching factor applied to the upper levels when the
+      vertical levels are generated automatically (eta_levels not given).
+    type: real
+    example: 1.1
+  max_dz:
+    description: Since 4.0. Maximum layer thickness (m) allowed when the vertical
+      levels are generated automatically.
+    type: real
+    example: 1000.0
   dx:
     description: grid length in x-direction (in meters)
     type: list
@@ -2382,6 +2397,13 @@ physics:
     options:
       0: 'OFF'
       1: 'ON'
+  haildt:
+    description: time step (minutes) between WRF-HAILCAST calls; used together with
+      hailcast_opt. 0 means every model time step.
+    type: list
+    itemtype: real
+    minlen: max_dom
+    default: 0
 stoch:
   rand_perturb:
     description: Whether to turn on random perturbations

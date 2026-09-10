@@ -500,7 +500,7 @@ class Project(object):
                 continue
             os.remove(path)
 
-        static_data_exclude = ['README', 'example', 'namelist.input.', '.exe', '.tar', '.gitignore']
+        static_data_exclude = ['README', 'example', 'namelist.input', '.exe', '.tar', '.gitignore']
 
         static_data_dir = os.path.join(wrf_folder, 'test', 'em_real')
         if not os.path.exists(static_data_dir):
