@@ -277,7 +277,7 @@ def bootstrap() -> Iterable[Tuple[str,Any]]:
         # Handle the special Python environment bundled with QGIS on Windows.
         try:
             import qgis
-        except:
+        except Exception:
             qgis = None
         if os.name == 'nt' and qgis:
             # sys.executable will be one of two things:

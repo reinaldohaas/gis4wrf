@@ -25,7 +25,7 @@ class SmartConfigDialog(QDialog):
         try:
             wrf_nml = read_namelist(self.project.wrf_namelist_path, 'wrf')
             self.max_dom = wrf_nml.get('domains', {}).get('max_dom', 1)
-        except:
+        except Exception:
             pass
 
         try:
@@ -35,7 +35,7 @@ class SmartConfigDialog(QDialog):
             if self.max_dom == 1:
                 self.max_dom = nml.get('share', {}).get('max_dom', 1)
             return dx / 1000.0
-        except:
+        except Exception:
             return 10.0 # Default fallback
             
     def _build_ui(self):

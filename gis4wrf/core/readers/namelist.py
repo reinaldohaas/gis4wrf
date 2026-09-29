@@ -30,7 +30,7 @@ def read_namelist(path: Union[str, StringIO], schema_name: Optional[str]=None) -
         raise UserError(f'Namelist file {path} does not exist')
     try:
         nml = f90nml.read(path)
-    except:
+    except Exception:
         # f90nml does not raise useful exceptions, so we can't include details here
         raise UserError(f'Namelist file {path} could not be parsed')
     

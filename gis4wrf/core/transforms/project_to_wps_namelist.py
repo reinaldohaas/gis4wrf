@@ -40,7 +40,7 @@ def convert_project_to_wps_namelist(project: Project) -> dict:
     # to the geog folder with a dummy string.
     try:
         geog_data_path = project.geog_data_path + '/'
-    except:
+    except Exception:
         geog_data_path = '/path/to/geog/folder'
     
     wps['geogrid'] = OrderedDict(

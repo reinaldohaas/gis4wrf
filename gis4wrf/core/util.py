@@ -77,14 +77,14 @@ def link(src_path: str, link_path: str) -> None:
     try:
         # Windows: requires admin rights, but not restricted to same drive
         os.symlink(src_path, link_path)
-    except:
+    except Exception:
         # Windows: does not require admin rights, but restricted to same drive
         os.link(src_path, link_path)
 
 def link_or_copy(src: str, dst: str) -> None:
     try:
         link(src, dst)
-    except:
+    except Exception:
         # fall-back for Windows if hard/sym links couldn't be created
         shutil.copy(src, dst)
 
@@ -109,7 +109,7 @@ def retry(fn, retries=5, sleep=1):
     while True:
         try:
             return fn()
-        except:
+        except Exception:
             retries -= 1
             if retries > 0:
                 time.sleep(sleep)

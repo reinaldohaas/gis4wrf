@@ -65,7 +65,7 @@ class Options(object):
                 # Importa aqui para evitar import circular
                 from gis4wrf.core import find_mpiexec
                 find_mpiexec()
-            except:
+            except Exception:
                 pass
             else:
                 self.mpi_enabled = True

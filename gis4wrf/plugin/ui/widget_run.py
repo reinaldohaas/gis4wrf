@@ -200,7 +200,7 @@ class RunWidget(QWidget):
         self.control_box.setVisible(True)
         try:
             self.run_program_in_background(path, cwd, self.on_program_execution_done, supports_mpi)
-        except:
+        except Exception:
             self.on_program_execution_done(path, None)
             raise
 

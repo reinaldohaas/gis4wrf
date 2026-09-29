@@ -34,7 +34,7 @@ class Task(QObject):
             else:
                 self.result = self.fn()
             self.succeeded.emit(self.result)
-        except:
+        except Exception:
             self.exc_info = sys.exc_info()
             self.failed.emit(self.exc_info)
         finally:
@@ -91,7 +91,7 @@ class ProgramThread(QThread):
                     self.error = msg_val
                 else:
                     raise RuntimeError('Invalid output received: {}'.format(msg_type))
-        except:
+        except Exception:
             self.exc_info = sys.exc_info()
 
     def kill_program(self):

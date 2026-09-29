@@ -347,7 +347,7 @@ class MetToolsDownloadManager(QWidget):
             try:
                 is_default = (float(self.top.value()) == 90.0 and float(self.bottom.value()) == -90.0 and
                               float(self.left.value()) == -180.0 and float(self.right.value()) == 180.0)
-            except:
+            except Exception:
                 is_default = True
             if is_default:
                 self.on_extent_from_active_layer_button_clicked()

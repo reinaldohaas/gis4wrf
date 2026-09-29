@@ -149,7 +149,7 @@ class ConfigOptionsPage(QgsOptionsPageWidget):
         
         try:
             find_mpiexec()
-        except:
+        except Exception:
             has_mpi = False
         else:
             has_mpi = True

@@ -145,7 +145,7 @@ def convert_wrf_nc_var_to_gdal_dataset(
         if var_name in DIAG_VARS or interp_level is not None:
             try:
                 var = wrf.getvar(ds, var_name, timeidx=wrf.ALL_TIMES, missing=no_data, squeeze=False, meta=False)
-            except:
+            except Exception:
                 var = wrf.getvar(ds, var_name, timeidx=wrf.ALL_TIMES, squeeze=False, meta=False)
             if interp_level is not None:
                 vert = wrf.getvar(ds, interp_vert_name, timeidx=wrf.ALL_TIMES, squeeze=False, meta=False)
