@@ -54,7 +54,7 @@ if platform.system() == 'Windows' or platform.system() == 'Darwin':
     PLATFORM = platform.system()
     HOME = os.path.expanduser('~')
     if PLATFORM == 'Windows':
-        QGIS_PLUGINS_DIR = os.path.join(HOME, 'AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins')
+        QGIS_PLUGINS_DIR = os.path.join(HOME, r'AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins')
     elif PLATFORM == 'Darwin':
         QGIS_PLUGINS_DIR = os.path.join(HOME, 'Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins')
     QGIS_PLUGIN_DIR = os.path.join(QGIS_PLUGINS_DIR, PKG_NAME)
