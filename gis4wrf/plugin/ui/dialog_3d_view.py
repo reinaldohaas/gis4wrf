@@ -66,6 +66,15 @@ try:
 except Exception:
     HAS_MPL = False
 
+
+def get_cmap(name):
+    ''' matplotlib.cm.get_cmap was removed in matplotlib 3.9.
+        The colormap registry replaces it and exists since 3.6. '''
+    try:
+        return matplotlib.colormaps[name]
+    except AttributeError:
+        return cm.get_cmap(name)
+
 try:
     from netCDF4 import Dataset as NC4Dataset
     HAS_NC4 = True
@@ -476,7 +485,7 @@ class View3DDialog(QDialog):
         self.canvas.draw()
 
     def _cmap_obj(self):
-        return cm.get_cmap(self._cmap_combo.currentText())
+        return get_cmap(self._cmap_combo.currentText())
 
     def _norm(self, data):
         vmin = np.nanpercentile(data, 2)
@@ -695,7 +704,7 @@ class View3DDialog(QDialog):
             terr_n  = (terr - terr.min()) / max(terr.max() - terr.min(), 1)
             terr_s, lons_s, lats_s = self._sub(terr_n * self._vert_exag * 0.15,
                                                 lons, lats)
-            terrain_cmap = cm.get_cmap('terrain')
+            terrain_cmap = get_cmap('terrain')
             t_col = terrain_cmap(terr_s / max(terr_s.max(), 1e-6))
             ax.plot_surface(lons_s, lats_s, terr_s,
                             facecolors=t_col, shade=True,
@@ -1022,8 +1031,8 @@ class View3DDialog(QDialog):
 # You can run this in the QGIS Python Console or in a standalone Python environment.
 import numpy as np
 import netCDF4 as nc
+import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
 # Data Source
@@ -1085,7 +1094,7 @@ except KeyError:
 
 # Surface Plot
 norm = mcolors.Normalize(vmin=np.nanmin(data_slice), vmax=np.nanmax(data_slice))
-cmap = cm.get_cmap("{self._cmap_combo.currentText()}")
+cmap = matplotlib.colormaps["{self._cmap_combo.currentText()}"]
 colors = cmap(norm(data_slice))
 
 ax.plot_surface(lons, lats, terrain * {self._vert_exag}, facecolors=colors, shade=True, alpha={self._alpha}, linewidth=0, antialiased=True)
